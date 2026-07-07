@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bitácora de Montaje — ALTIX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+
+  <!-- REEMPLAZA ESTOS 6 VALORES con los de tu proyecto Firebase -->
+  <script>
+    const firebaseConfig = {
+  apiKey: "AIzaSyDkZW1aL6Skki7pUej8UZc8F3iYYbWp_SY",
+  authDomain: "bitacora-altix.firebaseapp.com",
+  projectId: "bitacora-altix",
+  storageBucket: "bitacora-altix.firebasestorage.app",
+  messagingSenderId: "911611842025",
+  appId: "1:911611842025:web:f3cfaa82d33e72e8cc0f78"
+};
+    firebase.initializeApp(firebaseConfig);
+    window.__db = firebase.firestore();
+  </script>
+
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #EEF1F6; font-family: Inter, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    var React = window.React;
+    var ReactDOM = window.ReactDOM;
+    var firebase = window.firebase;
+
+    async function importarDatos(jsonText) {
+      var data = JSON.parse(jsonText);
+      if (!data.projects || !data.entries) throw new Error("Formato inválido");
+      await Promise.all(data.projects.map(function(p) { return saveProject(p); }));
+      for (var pid in data.entries) {
+        var ents = data.entries[pid];
+        if (ents.length) await saveEntries(pid, ents);
+      }
+      return data.projects.length;
+    }
+
+// ---------- Brand tokens ----------
+const NAVY = "#1F3864";
+const STEEL = "#2E75B6";
+const AMBER = "#C8762A";
+const GREEN = "#2E7D52";
+const BG = "#EEF1F6";
+const CARD = "#FFFFFF";
+const SLATE = "#1E2A3A";
+const MUTED = "#64748B";
+const LINE = "#DDE3ED";
+// ---------- Firebase Storage Layer ----------
+async function loadProjects() {
+  try {
+    if (!window.__db) return [];
+    const snap = await firebase.firestore().collection("projects").get();
+    return snap.docs.map(d => d.data());
+  } catch(e) { console.error(e); return []; }
+}
+async function saveProject(project) {
+  try { await firebase.firestore().collection("projects").doc(project.id).set(project); }
+  catch(e) { console.error(e); }
+}
+async function saveProjects(list) {
+  try { await Promise.all(list.map(p => saveProject(p))); } catch(e) { console.error(e); }
+}
+async function loadEntries(projectId) {
+  try {
+    const snap = await firebase.firestore().collection("entries_" + projectId).get();
+    return snap.docs.map(d => d.data());
+  } catch(e) { console.error(e); return []; }
+}
+async function saveEntries(projectId, entries) {
+  try {
+    await Promise.all(entries.map(e => firebase.firestore().collection("entries_" + projectId).doc(e.id).set(e)));
+  } catch(e) { console.error(e); }
+}
+async function deleteEntry(projectId, entryId) {
+  try { await firebase.firestore().collection("entries_" + projectId).doc(entryId).delete(); }
+  catch(e) { console.error(e); }
+}
+
+
+const ALTIX_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAD+CAYAAADmvHsGAABbM0lEQVR42u3dZVgWa9c//nXOFXRIiGBggaLYih2IjSCtgAEIYhfqthVBMTAwsFsREQmxUGzFwsIAUUnp7rji/L9w8/vv+3nu/eytziixPsfhmx3ItWaume/MrDkXAEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCKGGIq+8vLmd79X9q04/cMdqIITqOoIlQAjVdfMOXW3xKqnkUkxSQQ9lIYgHdNBZE7pygh8hpBKrgxDCgIUQQt9p6ak7FmduJ2zKKak0AIkIpACgqqwCRu2ahE7v1NzRzm4AhiyEEAYshBD6Nyil/H5Lz05Oyindn19aJUuo5P/9OymlwBPIQCt1+aiFFt3/mDe290usGEIIAxZCCP1DuDJeFXTodWqBc3FpOfDIf/tvABiBEHRUZTM6N1ezv+Flc18sxdohhDBgIYTQ/3L6VlyHnRHPD8WmFgyRSsTA/MNRSkIJaDVREPdpq7k6Yq31FqwgQggDFkII/YkBgJkHbphEPE08kFUmai8VVf/rA5SUAgj4fOir3+x0+LKJ85s0IUVYUYQQBiyEUKPGIwAj1gS5x2cU+6fmlTI8+P5nfZQCCOXkoYWqzB33Ed1mL7HpHY+VRQj9tuMalgAh9DtRSuVeCrqfuPs+fXleSQXDI/THrhYJgEQkgsIKcZuvBSUOJrbOMe9uBiZhhRFCvwPewUII/TZn7sZ18Qp67JOSX2EqqqoCwtIRSQIEVBXlSsx66u4KWGK6DpvfEUIYsBBCDR4DAA6bQwe8+lp8MSGrpJlUVA2EsHs4kgIBRXk5aK+luOfCH5Yb2zVTysbKI4QwYCGEGuxBx23v9eVXXqauzcgvlfvRR4L/KmRRCjJyCtCtpeqLoYYtrbZMG5yKWwAh9CtgDxZC6JehlKo9khpuv/46dXl+SYWAx/ElHiEEJKIaSC+s1Mkrrpg4Y/bilAfhJ+JwSyCEfsXFJEIIcW7v5Re6R6PenUjIrhhWWVH+j+tbsU0KDKgpCKtMurVaFbjUzI8QIsGtghDCgIUQqrdWnL5vEvky5dzr5DxNIhWz3m/1b0kogJqqChhoKx457DFisYGmZiluHYQQBiyEUL0i5DMwc/+t5YEP4pbnllSp/Mj6VmyTUgo8vhAGdGwWazOgg+080+4JuKUQQhiwEEL1QhGlapZrgle9TStYnF9UBlw2s38vCgDACKClhuLnGcYdVq+yH3Se4iZDCGHAQgjVZduDoptfjv166cmnnJ7VVZXAkLp5qJECAy3UFaU92zWdE7piwlFCiAi3HkIIAxZCqM4dUJafvD30+O2PO/PKRD2ouPq39Vv9WxIpgIqSApgY6gTvdOwxtVWrVpW4JRFCGLAQQnUCnyEwYMlZu+SCspNf88tlGVp/XtKTUgCBQAjddNUfedn2XTC6X/sXuEURQj8D18FCCP00Sikvhuly8MnnXK+84gohF83sFAAEQhmQSgEopcDmjTFCAKQSMWSV1LR6/iVrfJ9xk+9/uXchA7csQggDFkLotwh+/FnPyufSwZdJ+ZOra6oZLta3kgID8kJG0qWl+m5lWb5MsYhoS8RilkMWAaASyC2tViqqqJlo7TRHHBt5Nhq3MELoh44pWAKE0I9gAMDRN6zH44S886mFlXqSmmpgu92K/hmudNQUi0Z2a770xALTI9EfU5t7HH24/XVS3sTqmhrgJtARkJcRgEFztW3PtjtuIoQU4RZHCGHAQghxbsr2CLcHH7N3pWSXyPMIB48EKQWeUA7aasp90mumbHl5re372qUUGAJgtSl827249EV5xZU8LpaAkFIAOXkFaKMme3tMb01HX+fxWbjVEUIYsBBCnKCUypl5Xdxy593X2RU1Eh4P2A83FABkZGShuZr82Z3OA9eON+qQ+D//GwGPwIi1QWM/phedS82vUKFiEft30CgFyvChU0u1r8Zdm0/d4zriDu4BCCEMWAghVp2797al1/kYv7Siasvy8jJOHs9JKAEFWWH1yK4tD4esnLCAkP/79tiO8OcD91yJ3ZJeWDGQi8eUAABSwgNVeUGhWe92688uMd0tlkhxZ0AIYcBCCP08V//IXjEJ2WFvUwtagETMTZABHug2Vapsq6U45bbXpIv/9t5Y0PV3akcfx5+59yF9bHWNCHhc/G6UgJqqErRWV9jyfPsIb0K0ynCvQAhhwEII/RAGAOYdiloYFP1lZVZRuSZXSzDwhXKgocC8tOnXYfZu9+FPv/fBI6WUDFt1fvmnrNJNmQUlwMWjSyn9tlSEUXvNp4M7aVtumjI0E/cQhBAGLITQ94YW1aErzy9+n1awprCsEhiOQguPz4ee7TQvrzDv6W4xyOCH15/iE4BpO6/ZXnmV5JdXJtKmEhHrB7naOYatNJQ+uI0wWLHSrv8l3FMQQhiwEEL/iu+lGI3w6E9Br1OLjMvLyznqtwLQUFGEHq3Vt0Z52f4hZSm/7Qh70fvknQ9H3qXld6MSESezECnhQzNVucpe7bRmhq+acJYQIsG9BiGEAQsh9Le2XXwy/PS9jwffpxW2B6mIm3mCPAE0VZIp0tNWdX68zTGsRsxuPtl7551iUOTb02++FluUlJZx0pcloQAaqkrQt53G4Yg1VrMwZCGEMGAhhP4XGT4DzrsjXcKffdqeU1yjSqiY9b+DUgDCF0BrTaUYtxGdlv1h04+zpQ8opfKDlp+blZBetDW/vJrhYj6ilFLgC4TQt73WvSXmvVwnDND7jHsSQggDFkKoNowITb1CvF4lFy7Lyi/i6E08AFlZGeinpxU1pZemrbOlcdGv+GyLDt9xDoxO8MwuqmxJqJj9viwKwAhloIWqzMfJQzrO8Z4y5BbFXQohDFgIocYtKPpj8+M33wXeeZc+qLq6GngcNFxJgUBTVUVoo6W4Inqzw05CSPWv/Iwz/W91ePklK/xVSl4HqaiG9ceetWN92jVTkRi103I/v2z8UQmmLIQwYCGEGucBYFf40zH7rsf5JOaUdKfiGk7Wt6IMH9QUBJlWfduvPDJv9InfFTxi4tM1XPZFbU0trHIuKSsFhoO/Q0wBlOVlJGa92wacWTzO7VcHSYQQBiyE0G82bkOI1cevBQFJuaUyhEpYPyBIKQXCE0A3XbVPpr3b2Hs5Dn7xuz8zpZRvs+XSupuvUpaUVotluVjXS0oBZOXkwEBHJWL9pH4rzYzav8O9DSEMWAihBo5SyrPeFL458k3qnMoakRxX61spKSlBBy2F0FmDOrs4W/Yoqks1mL7nhu39D18Pfs4sasJQKSdzDBmBLHRurpLepaWG2ekl417hnocQBiyEUAN19UlCiwUnHm7ILK52rqws5+QgIAUGVOQFkh5ttdbd8rLdSQipqIsHv3n7b+jdep9+PjG3okdNVSX7IQsAKOGBirwww7pfW69j88YewCmGCGHAQgg1MOYbgjok51ZExGeV6klqqjhr9G6upphj2bftqj3uI47U9Zq8Ss1r7rrzmnd8RpFTZXUNN6vVAwNNFGVBR01+VazftN2EEJxjiBAGLIRQQzBrf+T0sKdJG7OLKrQYTvqOKPCFsmCoo/q5S0sVs5NLzOPrS20YAjBpW8TWyNdp8wpKK2V5hJtHprJyctCtVZMoIwNtWz/nX7NEBUIIAxZCiAOUUjmT1UGLXiXlehZX1PAZjpq6FRQUQFdd/oTvlAFrxxjppdW3OjEEYOz64NGfskrOf8kuUQEJ+yvYUwoAPD601lR6O3mY/nxP+8F3cQ9FCAMWQqieCboZo+J7Pf5oQna5dUlpKTfzBIGAoqywclzPNv6BS02XE0LE9blmfqFPevldfbsjo7h6iKi6iqNlKwSgriAoHGrYYlb4KovzNWLszEIIAxZCqF5Yefpez+svU8+9ScnX52LgMaUAUsKAnrZKea82mtPOLTO/2FBqdz06VW379adHH3xIt6gWiTmaY0hAS00ZOuko+9zytltNCMGUhRAGLIRQXcUjADP8b069GP3JJ7+8RodIuZknKJCVg5Yqwldj+7Rx2uM2IrahLVrOEIBRa4JWvf1a7J2RXwJc9WXxBQIY2KHZrakjOk92NjbMwj0YIQxYCKE6hlIqNFkTtCguvXhzdmEpcLW+lYxQCN1bawZtdx25eEAHjfSGWk8+Q8DW59K4+3Ffj2WXirS4WOmeUgCeUAa0lWViXEd29lgzaeB93JMRwoCFEKojbsZ8Udke8erCg49ZIysqqzh7rKWhLC8d0llne+iKCcukjWTW3u6IV0YHI9/sTsgs7isRi1jvZaMAAIQHrZoqVxg2bzLlmqd1iBgHGSKEAQsh9Hvtu/py6N4rb7d+zi42+jbImOUAQAEIXwCt1OWL9bWbONzytr0qamQB4GBMjPyFS4kBzz7nTSgtr+AowAKoKclLRnZrdejcEtO52JeFEAYshNBvIOQzYLUx3Pzp56wTqfnlTUAqZv1LTQGAJ5CB5k3kH80Z02n5Eqv+DxtrvSmlMgOXn5uRmFXsl1NSSRjK0RxDGRkwbKl+cYfTwD8GddH9gns6QhiwEEK/CI8A2Ppc2nzvY9YfWQUlnNxRkVIAoVAAgw10rrsNMHC0G2NYgAdNgEVHbjsGPEzwyi2pasPNSwQU+DJy0F5TMX5Uz5aTdk03eYMPDBHCgIUQ4lhyTo72LP8HB+99SDerrK7h5nEVENBWUwa9Zkor726cuAUfV/2nZYfvGtxLSA9+kZjbSSrmaBkMYKCdtmr58M468w7NG3Mcq44QBiyEEEd2XXrZ59CNN/6JORW9RdXcDCgmPAFoKAoyTXu3WXBy/tgLYrx98l/djPmisvzsI7/E/KppxcUl3CzkSgkoywnF43u39T/jMe4PQkgVVh4hDFgIIRa/rC67r1k9Tsg+Hf+1UJ6AhPUvsJRSIDwBGLZSj502TH/6You+MVj5fwiklPItvEI87sVleJZUimS4GkWkqKQIBtpKF/zchizup9/yK1YeIQxYCKGfP4kzs/bd3BX0+JNbYVkVZ8OIlRQVoWtLlbCJo7tMmWtsWIaV//cWHL458XJMql9idokWQ8UczDGkwPCF0KutZurobq0meE4e9BqrjhAGLITQD3ryJEHZLSB6W2p+1YzSsjJOHkNJCQNqCrJSA50mf9zfMsmfEFKBlf9+zjsut32dmh8Sn1nWrbqqgvW+LAAACTDQXF0pZ+pQvY1bpg3bjctlIYQBCyH0nebvv6H3+FP2xVfJ+V2oRMxJvxUlPNBSlU+zG9h+vZ+ryTGs+s95EZei43ro/urP2aWzyisqOVlNXwIEtFQVQFddcckTX8cdhBCMWQhhwEII/Zsv5sKDUZNOP0zwLiyvacfVUgCMQAZ66Kp/7GnQbMIBV5OPWHl28BkC9tuvbLwckzS/qLxKkcfRyCKBQAADDbQvO5t2d5zST78EK48QBiyE0N8HH6HRkrMuKTkl+/LKqhhOFrMEAGVFRWilLnd875z+fwzR18/FyrPPanPo6A9pxYEJGYWqRCrh5A4kTyADzZRl78817bp8mVXfx1h1hDBgIYT+hzt3kmQ33Yk59fRzrm1ZeQU3r/0DA0oy/KqR3VtuD15usZ4QIsbKc2fzhaedj0S93Z9eXDO4prKCs2U1mjeRLWijpujwcPvkSJxjiBAGLITQn/Zciul5OOrD3rj0wv6cDBSm35rZ22urFhp30nY/NG/sBaz6r5FaRNWcfC/sjf6YaV9TI+JsvSx1JTnpoE46my+ttFiFq8IihAELoUaNzwA4brs8Jupt2tGcUpGOVFLD/jxBSkEoqwBtNWRfmxi2sNsza9QnvMfx6w+2lhvDVj/5nL0+s6CMx9VSGzJCAfRu1zRwv/vwRYZttLKw8ghhwEKo0WEIwKi1F5a8+1q0LT2vBDg56QIBORkhGDRXObl3pvFqXKTyd4ZpAqZeISZvknPPfi2o0qLiGvYfGVIAgZw8tFIVPrMe0G66z1Tjd1h5hDBgIdRofCkoUJm/5/axW2+/WlWLxNzME6QE1JTkqkd2bbk76A+zZVK8bVUn7I94buR37f2WxJySYRIRNyGLMjzQ11Yt7aLbZPKFPywuYdURwoCFUIN38FpMz50Rb7cl51cMF1VxME+QUgCeANppKRcbNFOeeHm9TST2PdctMTHp8qsvR599GJ9lUV5ZzVnAVpIXVpj1brP3zGLTFTiwGyEMWAg1SAwBcNh6ZfiL5JzghMySJiCp4WCkCoBARhZ0VGTuzzXt6oHzBOsuSikzZOW5WYnZpXsyC8oJJ3MMgYCivDzo6ygd2TZlqKdxN3xEjBAGLIQaWLiatuv6xqsvkhfnFJdzMk9QQgFkBHwY0qlF+GI7I5cxhq0KsPJ1fL8AgHmHb1mdf/hpW15ZdVuQiNgPWZSCQEYOurVUie/XXst896xRn7DyCGHAQqjeK6O0memqC94vE3Oml1dWcfaavo6GMnRtoboqcoPtJuy3ql82hzw2CHmUGPAyObe7VCxifY4hpd/GIrVpqpxtPbD9H1unDT2JVUcIAxZC9dbWkIftgh8mn3uXUdKnqrKc/RMnABCeELSUhNmDO7eYfvEPsysiTFf10qVLMfJbHybs/5BVNrWwuISTviwpMNBEQUY0sFPzteErJ+wihFRh5RHCgIVQvbLyzL0JEc9Sjr1LzVNjqIT1fispBeDxBdBBR+XpjFGd58836/MMq16/UUoFo9ddmPkyMXdbQXmNDEMlrP8dEgqgqqIMPVqpnt/q3Mu9d7t2xVh5hDBgIVQfTpK8GXtvrAl5+mlpQWmNPI+Dl7ckFEBJQR6M2mqET9VXcZw6dXQ5Vr7hWH7y3sRzDxO2pOWV6XIxx1BKKTA8AfTT1/roOLDNxFlm/d5g1RHCgIVQ3Q1Xd+7wB17L2Pcxq2xGYXEpJ/1WUsJAU2U52r6ZyoIHm+0PEUKqsfINj8u2y7rvsoouvUkr6iqqruTk8TIQPjRXk09zMu64auOUIadxOQ+EMGAhVOccvBrT7nBU/PHXyXmDpRIxJ+GKMnzQVJZNsh/Yfq2f24gzuLBRw/YyIUPTeV/UmpT8inklZeXAAAdvnwKB5urK0ENXY8mlNRZ7CCE1WHmEMGAhVCe+SLP3Xx8Z/Dhxd0GFpKNUXM36l+vbIx0h9Gqn+WGovobNVrdRcVj5xoFSSqbuurbm0rNEj5LKGmUecPHImYKivDyM6tr8uo91p4n6+volWHmEMGAh9NvwGQL9lp1xTsktP5SeX8bnZLFICqCiogxt1eVObJ47YOFIbEpulJx2Rox++jk/4GNGoRo3fVnfFqltpiy84WHeb8F8867xWHWEMGAh9BvuLCTIjNsQe/Teu3T7qhoRw3D0Wr2yHL9mSKcW68JXW/oSQsRY+cZr1YmH7UKeJpxIKaoaVF1Rwf6YJQAAhg/tm6nktdNUsr7qaXMfq44QBiyEfplTdz4YegU99UnNKxsvFrH/SJBSACnhQVstlezxPVou8Js58jxWHQEApJeUaEz0ueLz6kuua2W1CBhOpgIQUFGQKxnXs9WOwCXjPbHXDyEMWAhxikcArH3C+71OzruQlF/RQlpTzckr9EJZeTBopvymu24Tq+OLxydi5dH/PHhP8o1Yc+dt+qrsonIZLkYvUSAgJysDbZoq7gldYe3dXlspByuPEAYshDjhsD3C4977DO+M/DJO5glKgYCCnCy0a6Z84OiMIV69DHQzsOro78K+6drgIfE5xRcSc8ubUlENJ31ZsnLy0KGZwlNjPS3bHXPGpGHlEcKAhRB7V/OUqoxac2FzdELmzMpqMXePZRTlysx6tdpzbonZSjGOvEH/gv/V1z12RrzwScuvHC2qrmK/L4tSoIQPejqqmaN6tHTf4zYiAquOEAYshH7aofAnbfxuxh1Mzq8aWVlRzvr6VpQCUIYHHXSaFBm0VJkUstwyEquOvkdmJlVwOxJ27HZsqm1ljYjwOFrgVllWUD6yu65n0DIzX0IIXgEghAELoR8z+0DkkOi4nAtvU/ObglTMwd0BAKGsPDRXET5wHm0we5X1wHdYdfQj+AzAsFVBcxMyivek5ZcCj5MlQwg0UVGCthry/le3Oy7XJKQUK48QBiyEvutk5br35vKLTz4vyyupbMLN4o4AskIBDNBvFnh86eg5rVRVC7Dy6GcwADBz7/Ux4S+S/XNKa9pIxTWcLHrLFwihn16zN2N76VitsBmML2EghAELoX9WXFysPs7n2h9x6UVLi0rKOeu30lZTlPRrr7k+dJWVNz5rQWw6GvWuk/+1N4djk/MGSMQi9h9rAwAwAmihrvDJybjDak+HwUFYdYQwYCH0t9YFPNS5FZsW+jK50Kiqspz9AbsUgPCF0EJNNrtXa03H8DVWt7CZHXHh3bt3wgWBH468SimYUlhSBtz0ZfFAW1VO3KWVxpxr661P4BxDhDBgIfS/+IY9Mz8WFef3Mb2g9bd+K/bDFU8ghDZNle4tHNt92SyzHs+w6ohLlFLB8FWBzh++Fu7NLa0WMFTC+t8hoQBNlBShv77muctrrJwJIdVYeYQBCyEElFLGaefVGTdjU32ziqsUuDoJKcjKwCCDZmHe49s49u7duwIrj36VVafu2p6698k7o7BcH6RiTvqyeHwh9GyrGb3SquesCf07xmLVEQYshBp3uJI19by4MyalaGZuQRE3j1GAAW01RdpWS2Xe/U12BwghEqw8+tX+OPmg1cP3X8OeJ+b2EIuqOXn8zQiEoKsml2bRp/2MnTOMr0vw6TfCgIVQ43Pu1tt2R+7GBT74kNlbJK4BHuHgK8ETgIaiTOLEQXpL97iZhOBMN/Q75eXlKY/edM0rOa9ifmFxGWcvcLTWUoG+7bUWBS832yXGnR5hwEKocWAAYNLWy92jP2ac+1pc1ZGbESMUGJ4AerXVfGM5oK39cqv+cVh5VBdQSomDb8SSa69S1pRUiJUY4OCRuBRAQU5Ix/ZsfTFomdl0QkgJVh5hwEKogbPeFDItJrHAPzW3RJ5HuFnfqomKMnRspnB6uV2HmebYb4XqoLkHo8beevv1WPzXwmYMZf+ljto5hq2ayFy3GtDeZdOUoZlYdYQBC6GGeeUuO9YzeNu9d+nu1WKJgAEOhjUTHjSRF1b3bt902fX1NvsJISKsPKqrlh260+LG+9TATzkVAysryjjpy6IMDzo2V03v21590vGF5g+x6ggDFkINyJnLL3TXXnq1NadMZFdRzt08wZbqiqn2A/SXbXYZeh6rjuqDkhKqMdLr7Nq4tKJ5ZVXVwNWFh5KMIG+CURvvgCXj/XDtN4QBC6EGwM4notuHjPxL8RnFrai4hoNHIRSEMnLQtaVqbO9mqub+S8enYNVRfTsZTN8bufpKTPKyrMIyJR4Hze9SIKCqpAA6TWQ33l07fquGhgb2ZSEMWAjV1x3c3T9yfujTpNU5xRWanAy/BQLKigqgq6645+S8ft7d27fPwcqj+vp9cdlxZeCz5LzQuPQiTW4uRgCEMjLQXbfJ4+5N5SwOLLXG7wvCgIVQfUIpVR64/OySuLSiNcUVNcBwMawZGFCWE5ZM6NN2x7llZp4iMS5vheq/czfeGniHx2xPyq8cW1VZwdEcQz600lCMcxpmsHSdw8ArWHWEAQuhemBTyE318EfZAR+yykaVl5Vy0LhLgTJ86KDTpKBve3WHE4vMIrHqqIFdoChabgr3j3qT6lheXcNwsQAvZfigqSRT1qtd0zmX11idIYTgilkIAxZCdZXnuYeDgx8nHn+flt+OSDl69VxeHlqpyj606N/GefNU489YddRQTxCTtkXMffwpe1dKdjGPx8mipAAaqsrQtaXyviiviQsJIWKsPMKAhVAdImAIOPtFuoY//7I5t7RanaHsH6elFEBWRgi92zY9em7luOXNlZXzsPKoIeMRAPf9kUNuvEw9lVJQpSsVVXHykgiPLwSj9poPXIcZTHUe2yMZK48wYCFUB1BKZUzWBK3+kF6yOrugBHgcjf/QaiJfY2zYwjtwiZkXvmSOGpOLjz4b+oQ83fU2Nd9EVFPDSV8Ww5cBHRXZ907DOy7c4Dg4Cr9jCAMWQr/R4fDHWkEv0i88iMsYXF1Tzfo8QUopEIEMtFVXyOnYQsX2ylqb+zjAFjXSCxmhxcawow/iMycXllawPhidUgBKeKDbVFnUtaXa9CvrrE7jelkIAxZCv/5gTzYEPLI6+/CTT0pRjd63V8r/vBRmEZ8vAB0V4Y0/zHsudx3X/RVWHjXy7x1vvGfo5Ldp+YezSqoFhM0v3J/fXwkloCwvA8M7Nb1o2reVq7NxjyKsPKpv+FgCVF9lZYF8emFpB4ahYXrqghoAAet/hxQAWqorVWyZOcivu7Z2OVYdNfqrckIkBODkxqDHhWHPU4wqKrkZsymWUJJeUClIzSztAABPsfIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQv8Bhz2jOk8gEEBNTQ3z3Ts3IdJf+XtSSslPfqcoIYTW9+3FMAxIJBIG99zvx+PxpFKptEHvmwkJCTJ6enoiTk9sv/i7j+ouSimXxyIeIUQM8N8nnmPAQnUWn88HZ2fnEZmZGT5SqVTu3/5/UqkYWrduJ/Xw8LDS09P7/Kt+XxcXJ7+cnFyTHzlBCgQC0NJqGnDo0JFN9fxgJli5cuXR7OysnpRS3Im/ez+gNocOnYxnOWzA4sWLzsbHx3X7sU1CYeDAQR/WrVtvJxaLf/r3OXr06Ixbt24sKSgoFDMMj/UgJBQKQE2tie+xYydP4B7VeMXFxbVet27thrKysp4cHOlAKpXw27Rp99XObqKTsbHx1/96DsPNgOqqyZMdVr948dwzKyuLIeTfXwuIxWKorhaBSCSS/ZW/7/v3H9qkp3/t/CPBgsfjga6ubosGsNmEX758HnP37h1NPh8PL99PLMf2T2QYBhISEvRfvXrV+Xu+R///BYsEdHR0pAzDzo2AsrKyk7KyCtqfPz9fXl5eLsvWz/0reXn5w7NmzRrg7+8/nxBShftV47JgwYLWixcvuhwfH9e5pqaG7YtIEAgE0LJly09JScnzhw0blv63NwlwU6C65t27d2qrVq3cf/fuXTuRSAQ8Hu+7TyiEECn9xbdQeDyemGEY+JG/9s/fWdIQth8hpJrH4333dkMADMNQjn6u+M997Ieu1hmGYe2R3oIFC6oBwHPevNlP3759H/TlyyclSuEHf7f/rqKign/r1k03ExNjlePHj7s7OzsX4d7VOHh5edmHhl70zsnJaVt7bGWLVCoFGRkZ6N69x9W1a9fN6dGjR/L/td9inwSqUw4ePDhizpzZN2Nj39iJxWLg4uoWIfT77dnjf33mTNdRrVu3fiQQCIDN6yGGYaCiogI+ffpkd+5cwFNvb+/uWPGGjVIq4+AwaU5QUODJnJyctoQQVkO7VCoFVVVVGDJkyN5LlyJMe/TokfyP+yFuFlQXCIVCmDZtsvXhw4cuJiZ+6SkSiVj9ciCE6p5Jk6Y82bBho4WRkdFVPp8HbDb41x4/4uI+6F+4EBixfv3aaXjB1mDDlWDq1KnH37x5s7egoEDA9rlDKpWCpqZGWbt2bW1PnDg1XyL5dw8bcG9DdeHLoWRra73j1avXwRkZ6cp/PTgihBo2Y2PjvODgENMePXqu1dTUBC7eoszPL2hx6dKlE7a21oux4g1LSEiIwcCB/YIePrxvX1RUxOpTD0opSKVS6NixQ7qLi9ukS5euBH/P27QYsNBvdfr0xRb29hPvREdHL8rPz8e+HYQaIYlEAhERV7zs7OwWaWho5rIdsgghkJ2dDU+fPt1ua2t9NiYmRgWrXr8RQmDhwoW9d+3acS0jI9NCJBKx3m8lKysLXbt2ezxunFnf+fPnX/nen4EBC/0227dvtd63b2vUo0ePerH95UAI1S9isRhWrly9y9bW0rxzZ8N0SinrfVlisRhevnzpMH/+vAtBQUGdsOr1N1ytWrVqQXT0w3ufP3/WlUgkrD71kEgkIC8vD23atNl19OixCR4eHuk/tM/hpkK/GqVUYGU1Yfrp02fOfv2a1qH2C4MQQqtXez5xcLDq2759u8uysrKshixCCFRXV0NaWurIAwf23//jjz+GYMXr3flDYcSIEcsuXrywKz09XZ7tpx4SiQS0tXXA1NR0Q1TU7UU6Ojq5PxzqcXOhXyk9PV3D2trqcFxc/JHc3BwZDFYIof/JyWlW+p079+1HjhwVLCcnR7lofv/4MV49LCw0xN3d3R3XbKsf/Pz8lK2trS4kJyduKSkpYb3fihACLVu2zBs4cJDpvn371/1suMeAhX4ZX1/fjnPnznr04kXMtNLSUmAY7LdCCP1tECo7fPiI7bBhw+Y3b96c9eZ3hmGgrKxUPTr64YFRo0ZspJTKYtXrruPHjw+8dCn0/vPnz8ZWVlayHq4YhgFd3VZPZs6cbbF79+6rItHPL/2GAQv9EuvWrXY5d+5M5PPnMfpsPy9HCDVMYrEYjhw5tnfUqDGmWlpaSWwfNxiGgYKCAoiLi1tpZ2cbFR4eroVVr1sYhgFbW4uhBw74hyUkfOoGQFlf30pRURH69et/fdo0l1HOzs6PWPvdcfMhLlFK5ceOHeVx8WLIkezsnFZsL/6GEGrwxxDw9va+umiRx3h9ff3Htf+MzRO4SCSCp0+fDPT13RZ55syZsVj1uoEQAu7ubus/fPh4/evXrxp//lNWw5WysjLt06fvpvPng+xcXV1LWQ2HuAkRV65fv97SzGx8wJcvib6FhYUEgxVC6EdNmTLlw65du4d169b9jJKSEuuLklJKISkpsZu//77gqVMdzbHiv1dpaWlTCwvzQzdv3lhXVFTE+sxKqVQKTZtqFdrYWC88ffr0KkJIKdufAQMW4sSyZcuMdu3a8fjNm9cTKioqcAkGhNBPMzQ0rImIuOwyZMjQzQoKijVcrJeVkpIs//Tps8C5c2dvp5TiVeFv4OHh0dTOzjbs7du3blVV1Zw0s+vr66cZGfU19vLatJurz4GvTiDWD1AeHh6Lr169sryoqECTEAYfCTYylFJZttcw+p6r0p95bbv2hP279llKKV6J/PMxRgQAKxYtWvT28eNH+9LS0lTZbD1gGAbKy8vlbt68udjc3Ez1y5d3nu3aGaZi5X+NLVu2jLtwIcg3OzvLoDYMsXl8kJWVhaZNNc/PmDFzlb29/RcuPwsGLMTmyUHNyWnajoiI8Gnl5eVACJ4rGqFqQ8POJ3R0dHpQKv2lfzHD8KCoqKjt7du32vzIixRSqRS0tbWlQ4cOfSIWiyt/R/EEAij29d2De9G/sHPnzoC5c2e8ZBheUEZGehexWMzayZgQAmVlZfD+/VuXJUtW9vfyWmW2Zs3GL1h1bi8upkyZMjkg4My+goICRbYvdP7st4L+/QcEHD16zJkQUsP1Z8KAhVhx5MiRDiNGjDiYkpI0lO1XaFG9ursgBoClv2v77927d1109KP15eXlP3QA1tDQEPv67rDn8Xi/5Y4FF3P4GrK9ew/FP3jwYPzu3X6nnz9/NoTNiRAMw0BNjQieP48xSE5OueLt7b1q9erVF7HqnIQr3tSpk3fFxr6Zm5+fx/oSPpRS0NTUFOvp6bkfPXrs1J/HKe4v+nDTop81Z86ckQEBZx5//Bg3tKqqCsMVAqlU+lv+VFZW8n72905LSxP+rt8ffb/BgwenBgVdGG5kZLRbTU2N9eZ3Qgjk5uZ2CAkJDnR0tHellOKNCRa9f/9e18Fh4p2HDx/Mzc/PZzVcfWtToKCm1iR+wgTLiRcuXDz2q8IVAN7BQj+Bx+OBm5ub561bNxeWlpYqY7BCCP0OhBAJpXShvb3d83fv3vsXFhYqsXk8+nNYNL+qqurwzJnuJpRSJ0JINVb+5yxYsMBg5ky3C6mpaZ0lEgnrzexCoRA6der8oVu37uM9PT2TfvXnwzMi+iEJCQktbGysQ6KibqwtKyvDcIUQ+t0hiwYGXjjj7Oxk16mTQT4Xw6KLi4shKurmpIEDB5wOCQlph1X/cStWrJj8/PnTx4mJSZ3ZXnyaUgry8vLQoUOHoz4+m8ds3Lgx6Xd8Rjwrou+2YcOGXtOnu1x6/vypZVVVFetvXFFKQSKRYKERQt/Nw2PZdUtLG6MOHTo+YntYNMMwUF1dDenpX2337dt7d+XKJd2x4t99fBfOmzfHJzQ05FhKSooKwzCsN7PLyclVGBubbL9585Zrly5d0n7XZ8WAhb6Lk9MU28jIaw8SE7/0qKkRsR6uJBIJKCkpgZFR3zK2p6QjhBqH2bNnJ54+fcbSwKDTYaFQyOoFGyEEpFIpxMfHtbhx4/ZtH5+NC/AO/r9z9WqCjJWV5fHbt28tLy0tEXBRt1atWpX37Nl74sGDB5eIxeLf+nlxr0D/9qqD5+Q01e/hw0enkpOT5di+6qi98tDR0ZH069fPvVu3rtv5fP5vWUsJIVT/6ejo5EZEXJ4xevTodTo6OqzfFWcYBjIzM5sEBATsHD165GJKqQCr/vcCAwMN/fzm3n3xIsahqKiYk8VDdXV138yYMdPm/Pnzl+vCZ8aAhf7RrVvXOkyYYB55//79+VVVVayPLKidZK6trZMwevTYMcePnzyUk5NdiQuUIoR+1uHDRzeMGTPaVkdHJ5f1E+i3YdHk06dP2+3tJ4afPn1aGSv+v2vk6elpun37tstxcR/6SaVSVsOVVCoFgUAAffoYPZwxY+YoZ2fn63Xls+NbhOhvEUJgyZIlQ1euXHs0Ozu7HZsL+f01XAkEAujWrfv96dNdXc3MzD59+1LyMPwjhH6aWCwGb2+f4JMnT6afPHl8/6dPn7qxuUI4wzBQVVUFjx8/HpudnRV59uzZpY6Ojg+x8t/MnDlj/rVrV/wyMjKAi34rVVVVaN68uXdw8MWNhJCqOhUucfOjvwk+Ms7OU+fdvXv71tevX9ux/ZZH7ZdDRka2etCgQftCQ8OG14YrhBBi27Rp0x47OEwe3LNnzysKCgqsr5clkUjgy5fEfvv37wtzcHAYgucQqmRjY7UjMjJyV2pqKuvrI0okEtDU1Cy1trZef+vWnTV1LVxhwEL/VUxMjLyzs9O5x4+f7E5PT+dx8UiQUgq6uq0rjYz6Op45EzCXEIKvDSKEOOXq6loaFnZp0pAhQ/YoKiqyHrIopZCUlKT+6tWLSwsWzFvbWJvfg4KCmo8ePSowNjZ2UVVVFWHzhaXau48dOujnDRo0xHTDBm/PuvrWOQYs9B8CAk72XrVqxZ07d25ZlpSUANtv8tU+EmzdWveFpaWV8blz5y5iIztC6FchhJQdPnx0vpnZhPnNm7eo4KL5vbS0VOX69euepqamuzIzM5s2pvr6+fkNOHHi2NO4uA/jKioqOOm3atGieaSLy7She/fufVCXa4EBCwHAt1XZZ86cOX7btp0RcXFxRhKJFLi4cyUjIwP9+/e7cujQHrOlS5c+xcojhH6H7du37+nVq/eQtm3bJTMMw+oby7XDouPi3i+YNWvmpY0bN2o19Hry+QKYMcPF4siRw+GxsbHNa+vAZrhSUFAAE5MR13bs8LObMmX6h7peEwxYCCilSpMm2a158iQ6IicnqxmbDaB//XIoKiqWjRgxwvv8+eDxnTr1zsTKI4R+43EP9u/f/2LZskVjmzdvESoQCFh9ZFjb/P7iRUzf4OAL13x9fUc33At0PtjaWq1//vxFaEFBvgYXL0M1bdoUevfuveTw4SOW/fr1K6kPdcGA1cgdPnxYzd5+Uvjz58835ObmcjLFHABAT0+vcMCAQRYHDx5eg6u0I4TqCnNzm/hHj6LtBgwYeFZVVZX1viwAgLy83B6BgWdDHBwm2lJKG9T6MwkJLzXt7Sdeffr06bqcnGxgv++MQpMmqmnm5mbTAgODttenGZC4TEMjtmvXLpPTp0/tTkpK7FS7FhXb4UpWVhZatGh528nJeb6Tk9N7rDpCqK4hhIgppS4ODhOj3717v7OwsFDI9l2YjIxM+erqmiB3dzd/SulcQki9bz718PDQdXGZcy49PaO/SCRi9QK99klKx44GHwcMMLLz9PSOrW/1wTtYjZBAIIApUxwcjh49HJyUlNjpr1dabH455OTkYciQIefu3LlrjeEKIVTHQ1bNuXNB/ra2E6dpamomsj0smsfjQUFBAdy+fXv2oEGDDt25c6dFfa7X8uVLxz179uR5UlJyf5FIxMmw5vbt9QIdHCb38/T0ia2PNcKA1cikp6drmJmZ7Xj9+vXZgoICVS7+DqlUCk2aqOWbmZl7HDt2woEQUoSVRwjVB2vXrg0cPHiMcefOhu+EQiHrw6KrqqogPT3N1dvb68b8+fP16lt9KKVk8eLFKy9dighMTEzU5GhYs8jExOTQ7dt3nJydnevt+QMDViOybt26FrNnz4x88+bVooKCQk4eCRJCoHPnzunGxsNH79ixYwdWHSFU3+zevSV1x46d4zt16nxORkaG9TcMJRIJxMfHGTx79uSht/eGqfUoXDGWlhP8bt6M3FhcXKzE9jlEKpVC8+bNRf3793fdv/+ge33qt8KA1Yh5e3taR0Zee/DixYue1dXVwMUXQ0FBAQwMOoYuWuQxaPfu3S+w6gih+qpz584p165ddzAxMfFTVFQUsdn8DvDtblZaWlrToKCgI2PHjnKmlPLqcj2Cg4N1zcxMb758+XJeQUEBJ8OatbS04vr3Hzj09OmzpxrCPoRN7g0cpZS/ZMlin4CAwDklJcVyXAxQppSCkpKSxMTE5NDevf4ehJBKrDxCqL6TSCRw9OjxhWZmZlEZGV8DMjIylNg8hjIMA/n5+YLKyspjDg72I969e+dsaGhYU9fqsG2bz7AtWzbtyc3NM+RiWDOfzwcjI6PXFhZW1o6OjokNZf/BO1gN2J07d1qMGzf28NWrV5cUFxfJcdHITikFLS2tdBsbmxn79u2fjeEKIdTQQlZYWNjl2bPnTmzfvn1C7bGPzZBVWVkJ0dGPHBYsmHstPDy8a136/O7u7o6hoeGRmZlZhmKxmJNhzYaGhv5BQcGDG1K4woDVgC1YsKDDli2bb8fFfXAqKSnh5JEgn8+H7t17JEyYYGns7b3pGFYdIdRQOTk5XTM1NRvcq1fvRzIyMpwMi/78+cvwLVs2X163bt0QtseU/cAFtMDBYdKGqKgbx1NSUoSEEC5WZi83MjJacvny1bmEkLKGts9gwGqAli1bNv3+/bt3376N1ROLxZyEK2VlZejSpduxNWvWDl27du0nrDpCqKFbunRpTmhomGnr1q03KikpAZuLJhNCQCqVQnJyUssbN67fXrrUY+Hv+pwxMXc0Ro40Of7y5Ys11dXVArb7rSil0L69XrmZ2Xj748dPbm8Ia4JhwGrgKKVyc+bMOhQeHnowNze3Gduvz9Z+OdTU1Co7dNB3v3Tpknvfvn2zsPIIocaCEFJ89+791VZWVuu1tbVr2J5MwePxICUlhRcSErLD3Nx8A6VU+Vd+vr1793b29NwenZCQ4FhWVs76+lZCoRDatGn9dPLkKUO3b98V0ZD3FQxYDURwcLDeiBHDz964cdOtrKyMx0WwAqDQsmWLz46ODpPDwiIOEULEWHmEUGMjkUhgy5ZtnoMGDRndrl37PEII64uSlpeXk48f49ZMmGAeFBISos55GGAYmDdv1qhDhw5efv36lZ5UKmX9kSCfz4cePXqE7dnjb+7m5tbg3zTHgNUAuLi49N63b+/dT58+WVZWVnDySFAoFEKfPn1f2NhMHLZ8+aoQrDpCqLGHLD8/v7szZ84a07x5i5s8Ho/1YdHl5eXw8uWL0UePHnp29uzZQVyGq4kTbec+evQkMj8/rzUAsB6umjZtCv379/cOCQmz7N69e05j2EcwYNXnjccwMGuW+5KnTx/fTEj4qFO7lgjb4UpNTQ369Omz/dix4yM9PDzSsfIIIfSNo6Pji8OHj1gNG2Z8lYu+LEIIvHkT23bnTt/QyZMnj+Hz2V1d6fDhw2pTpkwJfPr06e7s7CxOFqBWU1PPNzc3nxMcHLKGzTt9GLAQJ5KSClUnT3YMioq6ua24uFiViy8FAEDTpppFPXp0nxgaGr5EVVW1ECuPEEL/ydDQsOzEiZMTe/XqtUJdXQPYDhGEEMjMzNJ49y72qouL0wY2L6TfvHm14vHjRxOrqqoIF83sHTt2SJ00yd7S09PLXyQSNa6bIPjVqH8OHz7cdfLkcSGPHj20rays4qSRnRACbdu2i50+fYbNqVNng2pqarDwCCH09yGo7OzZc5utrW1mamhoZLAdshiGgdzcXBIVFbXG3n7SBUppUzZ+bvPmLTe1b9/+QJMmTVh7xEmpFGRlZaFDh443Ro8e12fVqlUPGuM+gQGrHhEKhbBkySLrY8eO3E1NTTWurq7m5JGgnJwcDBky5M6MGe7D5s6dewsrjxBC/8769esPjh07crSBQacvtResbIasmpoaePr0ic2oUSbhS5fO0fnZn7lixYrCK1euzenevdt8RUXFyp8NWRKJBGRl5aiJyYjAqKhbtkuXLs1prPsCBqx6gsfjgZPT1C23b98JTklJbvLnFRPr4app06bQr1+/1WfOBJg5OjriI0GEEPpOPj7b382dO29gy5a6AbKycqwPi66uroYPH+L6RUe/fLJp06bxLPxM6dmzgXssLKzs9fX1yiiV/tDv/OewZmpiYuJx6NBhe0JISWPeDzBg1QPXrl3TtrKyjLx58+ay7Oxs4PHYbXKsfSSora2dNWBA/zEBAYEbCSHlWHmEEPoxEyZMyH706JHz8OHDTykoKEjZbn5nGAZSUlJaBgScCVy4cN48SulPX3Fv2bIl3NzccnDbtm2fCYWCfx2yapfx0dLS+tq//8CRR44c29mYmtn/Dg57ruN8fTcPWLNm9e78/NxeIpGYkzc8BAIBtG+vFz1jhssCW1uHGKw6QgixEoRq+Hz+NGtr66ikpC9HMzIyBGw+eSCEQGFhocKdO3d3T506uQOldN7Proq+aNGi1+/evZuwdu2qPS9fvrIRiUT/53lHKpUCj8eDXr16f7a0tLKZOnXqG9zy3+AdrDqKUsqbNWvW9PPnL0RlZWX2EoslnDwSFAgEkj59+hzz8dk8EsMVQgixSywWw/nz50+bmZmOU1NTe08I+31ZeXl58ODB/Tnjxo0Oj4yMbPOzP9PQ0DArNPSS7eDBQzZpaWn97dITUqkUVFRUoGfPnue9vJb1xXCFAas+hCvB5MkO+x89enAkPT1dju1gVfvFaNGihWjgwIGzg4KCp/fu3bsCK48QQtxYs8Yzav78haa9e/d5JxAIgFJ2FyUViyUQH//RbP36dVc8PT37APzceYNSCoGB51eZmpq5N22qVfA/QyGlFBQVFcV9+vRdFxoaPs3QcEABbmUMWHXaqVOn2pubj7/38OFDt/z8fGB7ojqlFHg8HrRq1Spx6NDBwwICAg9h1RFCiHuurq4pmzZtNtbX7+ivpKTMevO7WCyG1NQUg5s3Ix8sXbpkys/+TJFIBF5eXoecnWdYdexokETpt4tzqVQKWlpa+RMmWLqePHlyAyGkGrcuBqw6bcmSRWN27PC9HBsb218ikXDSbyUjIwNdunSNXLfO03Tr1h3RbI52QAgh9H/r2LFj3vXr1+cNHTp0vaysbBnbx2CGYSAxMVEmPDz0iJWVxVJKqczP/swFC+bcs7W1M+rSpUuUsrIStGnTNq5jx04Dt27dehK36N/DJvc6gFIq5+Q0dXZU1K0teXm5PEIYrta3qho4cJD/iRMn/8BBzQgh9HsQQqQA4Dl79uzn7969DUpKSlRgc9TZn8OihXFxcVvNzMb3ePjwofugQYNKf+Znuru751FKbdauXe3WpUvHCDu7KR9xS/5D2MUS/F6RkZEKNjY2p58/f+6bk5PDI4T9u1ZSqRRat25TPnz4iKknT57ywHCFEEK/n7+//1U3txljdXVbPeHz+aw3v5eWlkBs7Bv7LVs2Pz1z5kwXFoJhsZfXRl8MVxiw6rwdO3b09PXd9vjZsyfWxcXFnPRbCYVCaNeu/esRI0wHHDp06AJWHSGE6o4pU6Y8WLRoyQQjo743+Xw+sPnIkBAGKKXw+vUrg127tl+ePn3aQIbhYdExYDVchBDYtMl7YUDAmetxcR+61F5tsB2u5OTkoU+f3heOHDlq5um5KhYrjxBCdY+1tXXO+fNBY7p167ZBXV0duOiNzczMavXmTewdV1en+VhxDFgNEqVUxcrKyisgIGBnZmamJldLMCgqKpaMHDlqbXBwqJ2+vv5XrDxCCNXpC2/p1avX11lZWS1TV1fP56L5PTMzS3Dr1u1dTk5Tj1NKlbDqGLAaDF9fXw1T03EX376NXV1YWMjJXStKKejr6+ebmIy08ff392JzPANCCCHuiEQiWL9+w7YJEywndOrUKav2mM5myKquriaPHj1yGjnSJMjHx6cJVh0DVr3n5eU17NKlsKexsW9MKirKWQ9Xf74lCAYGBvcmTXLou2/fvptYdYQQqpfni0eTJ0/t26ZN62syMjIs92URqKyshPj4+DHXr199unXr1oFYcQxY9RKPx4MVK/5YHxwcFJ6YmNiWEML6EgyUSkFJSQn69et/5MaNKGt3d/cvWHmEEKq/pk2blnr//qOJI0eOCpOVlRWxvSgpIQQSExP1Tp06Gbp06WIXPh+b3zFg1SNfvnzRGjNmzO7Q0NB1eXl5ylz0W1FKQUVFNcfU1GzBmTNn3Qgh+Vh5hBCq/wghpUeOHLUcPXrsATk5OVYfF9YqLCzQjIq6ddTOztaTi3MUBizEuvnz57eaOdM9Ij7+w7zS0lJO+q0AAAwNu6SZmpqZbd++fTcXXz6EEEK/LWDB5MmTB7x798aiuroauAhADMNATk4OREdHrzU1HRfw+vXrplh5DFh19guxaNEiyydPop98+PC+T3V1NWf9Vt26dQ+fOXNWv61btz7DyiOEUMPB4/Fg6VKPNa9evbj55UtiSy4voL8NixbDhw/v7WfPnhm+bds2Q9wCGLDqFEopmTt3rt+NG9cDMjIytBmG4aDfioKamhro6rZZGBFxeZKFhUUGVh4hhBrUuURh6NCh6yIiIjbk5eXJs32R/nc3B2pqaiA1NaXf5csRjzw8FprilsCAVSfcuXOn9ciRJieuX786v6ioSJaLYAVAQV1dI8XS0topKuqWHyGkCiuPEEINh6+vr8aECROuJSd/WV9SUgK/Ilz9NWQRwsDnzwnK169Hnl+5cqUPpRQbs34QDnv++V0S/Px8jdetW7M/NTW1g1gs5qDfSgo8Hh969OgR36/fAKvly5fHYd0RQqhh8ff3H3327JltqakpXSilvzRc/RXD8KCoqEghLCxk+evXLxUppUvxgv4H6ogl+JmdkIFZs9ycg4Iu3Pjy5UsHsVjM+iPBb6uyK0GvXr1P+vntGYDhCiGEGthlOiEwcaL12BMnjl9ITU3pUvvPfvf5raSkBN6/fzfX2tri/vHjx1vjlsKA9UtQSmWcnJxO3rp1+3BSUjKfi34rAApNmzat0dPr4HzxYoirrq5uIVYeIYQaDh6PB25u031fv469mJ7+tU6NryGEgEQihZiYF30OHTpw5fDhA2a4lAMGLE4FBQV1Gjx4wPm7d29Praio4PF47C7QVvu2iLa2TtykSQ4TIyIiThBCxFh5hBBqON6+fdty+PBhx27fvuNRXl4u97seCf5TyKKUQlpaaqfjx09cdHFxmoxb7t/BHqzvSaMMA+vWrZuwa9eOvenp6S0kEgknjwSFQiH07dvv+ahRFtYuLvZpWHmEEGpYtmzZoufhsTj4y5cvXWtqalg9l1BKQSqVApsX/4QwkJKSIsjJyTnq5jbd6NChI0sIITW4JTFg/Xyh+Hywt7fzuHz5km96ejrweDwOwpUEVFWbQPfu3XeeOROwmhBSgZVHCKGGZefOnfZhYaF7P3/+pMb2+DRKKcjLy4OqqqokIyOD9y0csfPzGYaBqqoq4b179+aNHj1C88WLR8t79RqYglv0b+qFJfhnN2/eVJk40TYsOvqxb0ZGOnD4SLCkc+culkFBFxdjuEIIoYaFUiqwspow/dixoyc+f/6kxnbv7p+LUFcZG5vscnae3qt9e73HMjIywPYcw4qKCvj4MWHS+vU+93BRUgxYP2z79u1GK1cuD42Ojp7wbVV29sMVj8eD1q3bPHdxcbUMCgoKE4nwritCCDW0cOXkNPVIfPzHIwUFeUIuxqe1aNGiokuXbvYHDx5cNGvWrDfnzgVaGBh0OiEQCEAikbAasiQSCbx69VL35Mnjl1etWmWLze8YsP41gUAAHh4eU86dO3stKyvLWCQScdJvJSMjA8bGw27t339gzOzZs29j5RFCqGF58uRJJyurCbfu3bs3tbi4mNUL9dq7U7q6rd5Nm+Y8MSQkJKz232lra+dcvnzF2cTExEtbWxukUimrIYsQAkVFRbrXrl0JmjTJbgGllIdbGwPWP+2wfEtLC+/bt6NOZWRkqNXuTGySSCSgoaEpHjp06Jrjx0+NNTQ0LMDKI4RQQ0LA2dm527JlSy6/fPlqMNsLUUulUhAIBNCnT+/HTk7TR8yePfvyf/vvTp48vXbEiFGOmppN81j/hIRAVlYWvHjxYpebm1tobm6uEm53DFj/1YkT+5tbWVnefPbs6aqcnBxO+q0IIaCr2zq7V6/uo06ePO1NCBFh5RFCqGFZssRjTmzs6/tfvnxpI5VKWe+3UlFRgXbt2vlcvBg20s3NLfvv/luRSARbtmwJcHV1s9TTa/+eUspqXxaPx4OKigq4fTvKzNzc9PyJEyfa4dbHgPUf/P39zU+eDIyOiXk+jJuRNxSEQiF06tT5+tat20YfO3bqTu2XDv/89Q8DMjIyEtwjEUL1EaVUwdl52uaIiPDdWVlZymyfSyQSCairq1dYWFh53717fyUhpPzf/H9z5859aGY2bFD37j2uy8vLs/7IsKamBr5+TR97+vSJR3Pnzh3Y2PcDXKbh25eBmTlzxuwDB/y35Ofny3OzKvu3gKWiogJqak3Utm/33WZlZSnA6v+X1M8QeP/+nS7ba8MghBDXtm3bpmBtbRX44cP78WVlZaxeqNc+AdHT0yvo3r2rtY+Pz93vvRO1aJFnEaXUzs1t+rb79++7l5eXs/Y71h6v4+M/auXl5UesXr1y2+bNW33E4sa5TnajD1jp6THyZmamvikpKbMKCgo4Ha7JMAzk5uZCTk6OEcNgcPj7g8i3A0ldXNUYIYT+zvHjh/odP37KLykpyYjtY1htv5WmpmaUs/NUDycnt9ifCEKlADBz0aJF8Q8e3PPJyMiQZbMdhmEYyMvLaxIWFrbJxMRY5vr1G96NcRpJoz6D+fpu0ndzW/0gNjaW83D114T/7e8h+Odv/vz/NUIIoXpwp4LPh6VLF4/39z8YnpycbFR7rGczXCkoKICJyfAbmzYdtPmZcPVXfn5+u3r27DasVSvdVIZhWO3LYhgGCgsLIT4+fp2dnU1kUFCQJgasRsLLy2taaGjEw9jY2J5SqRRP6AghhH7InDkzV9+9ey8iPT29KZshBeDb3XxNTU3o3bvX8iNHjluMHNm7mM3gdujQ8aceHkvGNW/e/DKfz2e1L4thGJBIJPDs2bPhu3btuHLs2LHhGLAaMEqpzJQpU1YFBJw9nJycrMn2mAKEEEKNQ3FxsfrYsWP8rly56pWRkcHqW+e1b/qpqqqmm5tbuAYGXthCCKnk4nPY2tq+f/TosXX//gPOq6qqst78LpFIIC0trc/Ro4fDp0yZMg4DVgPk7+/fZNSokSdjYp55l5QUC/CuFUIIoR+xf//+5jY21mGfP3+aX1VVxXozO4/Hgy5duqabmo4x27Bhw1E2Q8/fBKGagIBz0wwNuy5UVVURsT1eBwAgOTlZ8fHjR+dnz57pTSlt8Hc2Gk3CWLlyZc8LF84/iY+Pm1haWoqPBBFCCP2QnTt9R1+8eCEmLu7DoMrKStaHNcvKykLHjgahf/yxfOSWLTte/arPRQipPn/+vJ+1tZ2zurpGKtvrZf05LFrx9u1bq0aNGuEfExOjjQGrnlu+fPnCmzcj7yQkJOj/NU0jhBBC3xF+iI2Npe3x4yeC4uLimrHdYvLnsGaxiYnJ8evXI+2HDRsW9zs+54YNG84OHjxkmIGBQZxAIGB9WHRpaRl8+fJl5oYN62/4+Pi0xoBVP78MylZWFttCQy/uyMjIUMa7VgghhH4Ej8cDR0fHHR8/JgTl5eWxfj6RSqWgo6Mj7t+//4xDh464EEKqf+fn3bt3b9K2bdtNO3XqfFEoFLJ+J6umpgZevXplGBBw9rK3t+dYDFj1SFjYhR6jRo0Mfvv27ZKysjKC4QohhNCPePv2bUsrK4vr0dEPFxYUFLDezA4AoKnZNH7IkEEmp0+fPc72m4g/qnv37kmXL1+xNTYevk9RUVHCdvM7AEBhYUHn0NDQcFtb2ykNrS+rwS00yjAMzJs3b9ju3fsufv78WQ2XYEAIIfSjpk+f3n7OnNkX09JSunIxrJnP50OPHj3fmZqOt3Rzc/tc1z4/IYTy+fy5pqZjor5+TT+TnZ2twOZj0T+HRQsqKipPubu7jaSUuhJCahpEHmlIXwRCCMyaNWvDvXt3rsXHx6vVjhVACCGEvteKFSsmvXv39vGXL5+7ikRi1pvZVVRUwMDA4OD27TsG1cVwVUssFkN4+OWw6dPdJrVt2y6R/eZ3HpSUlMDt27emDBw44PjFi1dbYMCqQ2JjY7VGjx55ODLy2prc3FxWl/1HCCHUeFBK+a6urqtDQoJPpqd/1WB7Pu23Znb5CiMjo5XXrkXObteuXXF9qMvs2bMvjx9vNrBXr55PZGRkWF+UtKqqGr5+TXPw9/e97+Ex3xADVh1w8uTJQfPmzQlPSEhwZXs9EoQQQo0rXFlZWRx5/PiRV1lZmZDtu1aUUmjfvn3FuHFjHE+cOOVDCJHWp/osW7Ysa88ef9PWrVtvUVRUBIlEwtrPJoQApRQ+foxrc/v2vah169bMxoD1m/D5fHBzczE/dOjg9cTExL41NTX4SBAhhNAPOXfunMGIEcY3Xrx4Ma2oqIj1xUMFAgG0atXyuYPD5OF+fnvD6mudWrVqVXD37v3lEyZYemtpaUnYDFnfghYDOTk5WsHBwXsdHe3XUkoV62VGqcdXGWT6dJfdjx5FzywuLuIzDI/1cMX2c2b0nekf70QihH4BQggsX77cePv2bUdzc3PbsP1yVG0ze7du3a4uWLBourGxcVZ9r5lEIoHt27evmTFjxr3Y2NeBaWlp6lKplLXzMMMwUFRURF6+fOk5ebJj38jISLvRo0eXY8DiWHh4UJthw4ZsSU1NtRWJRMAw7PZb1YaqZs2a5Wtr63ylVIpHoF8crMrKyrQ+f/7cDAMuQohrs2bNmnX79q29mZmZDBf9VhoaGqCvr785ODhkRVjYpQZTN4lEAvv37486evSo6ZEjh30yMtKNJRIxEMJOOGUYBkpKSuDhwwfjkpKSLp86dWr51KlTn2LA4ugqY8eOHWM3b97hm5WV2UkkEnFy14rH40H37j3ejxtnaj937ty3ePj59ebOnb0iLS1tE9tjKBBC6C/HewULC/PlN25ErqyoKGfYfjmKUgpqak0Kzc3NNmzevG1XQ71gnD59+tOHD8MmHDhw4UJMzLPRpaVlrN0BZBgGJBIJfP2aNuzgwf0Rixcvtt+9e/ctsViMAYvFHZXY2dlMPXfu7OGMjAwB2yMKaq80FBQUaI8evU6vWbNmjqGhYRkegn4PkUiEt64QQpzx8zuqOXLkiKOpqSlmlZUVHCweSkFPr0P6sGHGjuvWrbvX0Os5aJBFKaXU1sFh0sK3b99uKCwsZC1k1Ta/JyUlaVZVVUcuWbLEa+vWrZ5cD8D+6XBYHzbcw4cPlRwd7U+/eRN7/OvXrwIu7mhQSkFHR6emW7duUwMDA50wXP3+QI1VQAhxYdu2bX2vXAl8Hh8fZ1ZRUcF6M7uMjAy0a6d3y8RkRJ/GEK7+EoRKz50772VlZTNXQ0Mji+0AxOPxIDMzgxcaenH9yJEmm4uKitQwYP2EY8eOdfH13fr44cOHjhUV5YSLW7gMw0Dz5s3fTZrkMOHChYtnCCF49wQhhBoYPp8PmzdvdA8IOBP+4cN7XbafhEgkEpCVlQVj4+EXw8Lu2axevTqzMdZ5w4YN+4YOHTS6Y0eD5NrzLJshq6ysDL58+fLHlCmTI7Zu3doMA9b3/mIMA+vWrZu0b9/uyy9evOhMqZSTfis+nw/9+/d/vHTpH+M9PDyu4yEIIYQaHkII2NjYrA4KunAgJydHi4sWEx0dHTA2Hrb02LHjNk2akKLGXO/du/fHzps3f2CLFq3Oy8rKsj4suqqqCl69ejng+vWr0UePHq2Tw6LrZMCilPLNzEwXXroUdi47O6fVn18PVv8OiUQCysrKYmNjY79z584Ps7GxScFDEEIINTwfPnxQnzhx4sUnTx57ZWdns74EDKUUNDU1M/r3Hzj22LGTvnW9N+hXsbCwyIiOjp42bNiwAAUFBcr2sGhCCCQkJLTx998bZGlpac7n16228joXsC5duqRhaWkR9u7du505OTmc3LUCAGjdunVZz549rE6fPruwoQyWRAgh9J8uXLjQY/Zs99Bnz55YicUi1te3AgDo3bt30ty588fv2bPnOtuLbtZ3hJDqkydPO3bv3t2lWbNmYrbfpPxzWLRiQkJ8qIuLk19dGpNXpwLWjh07Bu7fv/f5ixcxptXV1ZxcZQgEAmjduvVjZ+fpY86cORdRH171RAgh9P1WrVo+6tCh/Xc+f/4ymO1JH1KpFJSVlaFbt+4X1q5d0tfV1fUVVvy/E4lEcP588Inx483N1NTU4mrPx6wFmW+LkjJRUVHzzc3NgxMTE3UxYP2Jx+PBkiWL3E+cOBb29u271rWplE1SqRRkZGRgyJChkX5+eya4ubk9wt0eIYQaHoFAALNnuy8KCQm98OFDnArbzeyUUlBQUJD07dt3Y0TE5ak9ew7Jxar/Y9XA09PzupOT4/iePXvFCQQC1odF19TUwOvXr6xnzpxx2d3dvXWjD1iUUrnhw4d53rhx80B+fr4GF0swSCQSUFdXrxo9evT6EydOju3Zsyd+GRBCqCGexilVGDduzI4HDx7uKCkpUWb7SYhUKgUtLa0iMzMz9xMnTq0mhFRh1f+9xYtXJG7cuGp4hw4dDiopKbF6J4sQAiJRDbx//97w5cvn99evX2/faAPWsWPHWpqajov89OnT2vz8fE4eCRJCQF9fL693b6PRBw4c8sQlGBBCqGEKDQ1t6eAw6W5sbOyigoIC1te3YhgG2rRp+7Fr104Dt2/feRQr/mMMDftmXbsWOXvYsGEbZWVly9lufmcYBjIzs1oGBwcdnzZtykJKqfB3fM7f1nK/Zs1K09OnTx799OmTFgD7g32lUinIycmBrm7rSHd3l+V2dpNf426NEEINk6enZ19v7w0Hc3Nzu3E3rLn73UWLFrsZGxt/xor/dBCSAsDq6dOdnn78mBCYnJwsXxuQ2ApahYWFMi9evNjp6OjQKyYmxqV3796iBh2w+Hw+uLi4/HHhQvDqsrJSRbaGQv7PL4O8vDzt0KHDtoiIK96EkFLcnVE9OeAghL7zROrm5jIxMvLaiaysLFkuhjWrqqqCoWGXw4GB52cRQvA1QRYdPXoi4siRg+OPHDm2NTMzo7dEImFt+zEMA4WFhRAd/WhyamqqWlhY2FILC4sPDTJgJSYm6np4LPK+f//u5NLSUk4eCUqlUtDW1i4ZMmTYmp07d+7GQcGoPvhzdpmqq6trG4CG1dJRVQWgqioLenpdMhYsWFCNWxux+L3he3gs8rt69er00tJSGS6ehDRp0qSibds2swIDz5/FcMUNV1f3O8ePHze7cuVKQEzMU2ORSMzqsGixWAxfv6aN27ZtSycPD49JO3fufPor1ir7RQGLwLp1azvOnDnjwufPnw25WoKBz+eDnl771I4dO1vs2rULX5lF9YZUKoX09AzHvLyCiQANq03wzzeuoKxMPBgAnuPWRmy4efOmyogRw3elp391Ki0tY73filIKenp6eaNHj52xYsWKULxY55azs3MWpXTU+PHj1qempq5is4eOEAISiQSSkpJaSySSe0uWLFmydevWvQ0iYC1atHByVNTNvcnJSSq1DWhsn5wUFRWhbdt2F/74Y/mqYcOGfcLdFdU3VVVVvKqqKl5D+1yUUpBIJFBaWsrgVkZs2LBhg8GuXTuDP31K6CSVUk6GNbdu3TpmzJhxdkuXLk3Civ8ahBCxQCBYvXz58orw8JAl+fkFTdjctjweD9LS0mQuXQrbPXr0COXr12/uJoSUcfV5OD3gUUoFDg6TfC5fvnQ0OTlJhe1n47VfBkVFJVGPHj1WXr16bTKGK1SPDy4N+g9CP33CYhjYsmWLY1hY6JXY2DedKAXW+61kZGRAV1f38J49+8wxXP16IpEIvLy8No0dO8aiQ4cOOQCU9UVJS0tLSXJy8kZzc7PAgwcPqtS7gBUVFdXJ1HRc8PPnz5dXVlYKueq3atmyZa6trZ1LYGCQD468QQihhsva2npmUND50zk5WW3Y/tkSiQS0tLRg9OgxW+7cuTejU6dOmVjx32fLlu33bWzs+rdo0fKGUChkPWSVl1fAq1cvTS9eDH585MiR/vUiYDEMA/Pnz+/j7b3hyocP780rKys5WZVdKBRCjx493o8aZTzA29v7DO6OCCHUMGVmZipMnepwIibm2d6srEzC9tvnhABoa2sXDhw42PbIkaPL2Z6Xh37M7NmzE6Ojn9iOHDnyspycHLA557H2znpc3AeDAwf8w6ysrIzZnmPIesBydXWd9/jxo3sJCQmt2Xzd8q/hSlVVFbp163Z4x45dYzw9N+N6JAgh1ECFhIQY2NvbnXv06PE0kUjEY7vfCoBCixat3ri6zrDas2dPcE0NPgipSwghJQcOHJrQr18/D21tbeDi7b+MjIymnz59jHRxcVlbJwMWpVRhwgRz/6ioG7szMjLkuJhoTSkFFRXV8r59+865evXaDH19/a+4+yGEUMO0bNkyowMH/O8kJiaZVVdXs95vJS8vD7169b41cuSoYbNmzbqLFa+zIUt69uy5HaNGjbFVU1NPq33Lky08Hg8KCgoEt27d9LS1tT6ZkZGhWWcC1tmzZ41GjhwR8e7d21k1NTWcLMEAANCuXbsUZ2eXiceOnfCvrsarDIQQaoh4PB4sXrzQ9dKl8EsfPnzQqh17xma4UlRUhL59+/mFhobbeHp6FmHV6zapVAo+Pj7BTk7OZr169U5lGIb1vqyamhp49erVVCenKaEzZ3o0/a0Bi8/nw7Rp00z27dsdkZDw0ZjtK4zaovJ4POjWrfvtCRMs+y9duvQK7moIIdQwUUplTU3Hrr51K+pwWVmpFvvnFAk0bdq03NzcYtnp02cWEkIwXNUjHh4eb7y9Vw/q3LlLkIKCArA9x7Cqqgo+fIgb+OrVg0ebNm0a81sCFqVUMHXq5HWvX7+8npyc0pTtK4zacKWpqQmdO3f2ioi4PHrx4sX4VgdCCDVQ0dHRag4O9lffv3/vlZeXz+o5pfYc1aZNm4wuXboN9/X13YYVr5+6dDFKu3r16rShQ4fulpOTE7EdsgghkJGR3j4g4EyQm5uLC6X0h3bEH1po9OrVq5pTp045Hx39yLiqqgrY77eiAEBAQ0Mjb9CgIYsOHDhwBtfRQQihhmvr1q1d58+fuycvL2+IWCzmZFhzly5dni1cuHjWiBEjXmLF6zdCSBUALJg92/1VTMyLfenp6fJstycVFhYqPX367Ki9/cSulNJl37sU1Hf/Nnv37jXZtGnj1fv37xlzNfKGEAYMDDrFzZ4913Lv3r1nxGIx7k0IIdRAubi4jAoPD7uflZU1hO23z6VSKSgrK8OgQYMv+vsfGIbhqmHZv//QCSOjfgOaN28eTwhhvS8rPz8fnjx5smDyZPu7t27d0uUkYAmFQrC2trY6ceJ4aEpKcm+ulmAQCATQt2/f0FmzZg9wd3d/iLsPQgg1TAKBADw8Fvk8ffo4pHaUGtsX7GpqalIDA4N5Z86cdWzVqlUlVr1hoZTC3r173yxa5DG+T5/ez3k8Hqt9WbXDoh8+fNR/1aqVl1esWGHIasCilCpYWlr4xcV9uJiZmaEEAMBF46G2tjZ07959UWhouJWlpWUR7joIIdRgT4zygwcP2n716tXlRUVFClwMa27SpEnihAnm00JCwvYSQqqx6g2Xvb39F1/fnUN69ux5oEmTJqw3v0ulUkhLSzW8f//u46VLl9r/m//vH3uwfHx8WtvYWF988eJ5z5oaEbD9aiSlFHg8HmhrN081MRkxd9u2bRFcLCSG6t3Bl/zoWid//n+/vGlPKpUSttdnaShXmL+qJvVxv/mV++aPbz9gtS6rVq1qOX686cVPnxL6SCQSVs8rlFIQCoWgr6+f0LVr9/He3j44n7aRaNOmTRWldK6Dw8TXr1+/2V5cXMxqcCeEQGJiomJubu6JBQvm9dm1a/eK/yu4/58B6/jx4xYBAWc3pqd/7SQrK0fl5OQ5OUrq6+u/mDzZ3tXW1iEWdxEEACArKytVUlKS8vn8775bKhaLQVFR8ZendCUlRamysrIULxD+9wlPUVER5OTkftl+8yOD5cViMSgoKEga4jZQUFCQKisrS39s+0lBTk6WtZ16z549/cPDQw9lZGQYKioqfltKnUUMw4COjvZ5L6+1q42MBifiN7BxIYRIAODg6tWrM588iT719etXJQ7amYSPHz9e5OzspB4UFDTTzs6u8rsDVmVlZZyqqoKjunp3EVfFUFRUhGXLln3W19fH27fo/+nQweBISUlBRFnZjywoK4JWrdqBQCD4pWOUunTptlBbW3MtTtr4b99zIRgYdEs8c4bbsaHa2tr7evToFVRWVvZD+02bNvq0ZcuWqQ2p9hKJBDp06DgZgPxwwm3RolWVSMTOaSAhIeFz06bqUzQ0moq42dcU4fDhw3GEELzSacS8vb0vBQUF9bh8OUSei2OySCSCqqpq4fv37/GRBUIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIdTo/H/vEDCAR9bHOQAAAABJRU5ErkJggg==";
+
+// ---------- Domain data: 8 fases (0-7) / 48 sub-actividades (proceso SLAI) ----------
+const FASES = [
+  { key: "FASE 0", nombre: "Descargue", subs: [
+    "Instalación línea de vida en tractocamión",
+    "Señalización y delimitación de área de acopio/descargue",
+    "Elaboración y validación del plan de izaje (<80% carga)",
+    "Limpieza y despeje del área de trabajo",
+    "Instalación de aparejos/eslingas en las piezas",
+    "Descargue de materiales con grúa",
+    "Posicionamiento de piezas en el punto de armado",
+  ]},
+  { key: "FASE 1", nombre: "Armado de pórticos", subs: [
+    "Ubicación de piezas en líneas de anclaje según planos",
+    "Colocación de tacos de madera y armado en piso",
+    "Unión de piezas con tornillos (torque establecido)",
+    "Instalación sistema keder (rieles superiores)",
+    "Aplicación de masilla Fix All en empates",
+    "Instalación de guayas en los pórticos (pre-izaje)",
+  ]},
+  { key: "FASE 2", nombre: "Izaje de pórticos", subs: [
+    "Señalización y delimitación del área de trabajo",
+    "Limpieza del área para izaje",
+    "Diligenciamiento de permisos y ubicación de grúa",
+    "Elaboración del plan de izaje de pórticos",
+    "Izaje primer pórtico (amarre de vientos)",
+    "Izaje segundo pórtico",
+    "Ensamble de correas laterales, central e intermedias",
+    "Izaje de pórticos restantes",
+  ]},
+  { key: "FASE 3", nombre: "Instalación de correas, guayas y pernado", subs: [
+    "Instalación de correas en pórticos restantes",
+    "Arriostrado — instalación de guayas entre pórticos",
+    "Alineación de bodega (demarcación y perforación de lámina)",
+    "Perforación de placa / dados de concreto",
+    "Aplicación de Sikadur AnchorFix",
+    "Instalación de espárragos y pernos de anclaje",
+  ]},
+  { key: "FASE 4", nombre: "Instalación de cortinas y techos", subs: [
+    "Instalación de cortinas laterales de PVC",
+    "Instalación de tensores inferiores de cortinas",
+    "Posicionamiento de escaleras para guía del techo",
+    "Jalado mecánico del techo (sistema keder)",
+    "Instalación de tubo tensor en bolsillo de lona",
+    "Instalación de solapa de cubrimiento keder",
+  ]},
+  { key: "FASE 5", nombre: "Instalación de puertas", subs: [
+    "Puerta rígida — Armado de marcos (soldadura, pulido y pintura)",
+    "Puerta rígida — Instalación de platina para riel de piso",
+    "Puerta rígida — Instalación de lona en marco",
+    "Puerta rígida — Instalación y alineación de puerta en rieles",
+    "Puerta cortina corrediza — Instalación de riel",
+    "Puerta cortina corrediza — Instalación de cortina en el riel",
+    "Puerta cortina corrediza — Instalación de sistema corredizo",
+    "Puerta cortina corrediza — Instalación de cajas sider",
+  ]},
+  { key: "FASE 6", nombre: "Instalación de canoas y perfilado a piso", subs: [
+    "Instalación de soportes de canoa",
+    "Instalación de canoas de recolección de aguas",
+    "Instalación de bajantes",
+    "Perfilado y sellado perimetral a piso",
+    "Remates y ajustes finales de perfilado",
+  ]},
+  { key: "FASE 7", nombre: "Entrega de proyecto", subs: [
+    "Limpieza general de obra",
+    "Inspección final de calidad (checklist)",
+    "Prueba de funcionamiento general (puertas, cortinas, drenajes)",
+    "Registro fotográfico de cierre",
+    "Firma de acta de entrega con el cliente",
+  ]},
+];
+const TOTAL_SUBACTIVIDADES = FASES.reduce((a, f) => a + f.subs.length, 0);
+const ESTADOS = ["Pendiente", "En curso", "Completado", "Reprogramado", "No aplica"];
+const ESTADO_COLOR = { Pendiente: MUTED, "En curso": STEEL, Completado: GREEN, Reprogramado: AMBER, "No aplica": "#94A3B8" };
+const RESPONSABLES = ["Yonny Carvajal", "Estid Mojica", "Eduardo Hernández", "Cristian Herrera", "Deybis Gonzalez", "Darwinson Payanene"];
+
+// ---------- Inline SVG Icons (sin dependencias externas) ----------
+function SvgIcon({ path, size, color, style, ...rest }) {
+  size = size || 16; color = color || 'currentColor'; style = style || {};
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      style={{display:'inline-block', verticalAlign:'middle', ...style}} {...rest}>
+      <path d={path}/>
+    </svg>
+  );
+}
+const Plus = (props) => <SvgIcon path="M12 5v14M5 12h14" {...props}/>;
+const Trash2 = (props) => <SvgIcon path="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" {...props}/>;
+const Clock = (props) => <SvgIcon path="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2" {...props}/>;
+const Users = (props) => <SvgIcon path="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" {...props}/>;
+const MapPin = (props) => <SvgIcon path="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" {...props}/>;
+const Building2 = (props) => <SvgIcon path="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4" {...props}/>;
+const ListChecks = (props) => <SvgIcon path="M10 6H3M10 12H3M10 18H3M21 6l-7 7-3-3" {...props}/>;
+const LayoutDashboard = (props) => <SvgIcon path="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" {...props}/>;
+const FolderKanban = (props) => <SvgIcon path="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2zM8 14v4M12 12v6M16 14v4" {...props}/>;
+const Ruler = (props) => <SvgIcon path="M5 8l-3 3 14 14 3-3L5 8zM8 5l3-3 14 14-3 3L8 5zM12 8l-4 4" {...props}/>;
+const CheckCircle2 = (props) => <SvgIcon path="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM7.5 12l3 3 6-6" {...props}/>;
+const ChevronRight = (props) => <SvgIcon path="M9 18l6-6-6-6" {...props}/>;
+const Save = (props) => <SvgIcon path="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8" {...props}/>;
+const Archive = (props) => <SvgIcon path="M21 8v13H3V8M23 3H1v5h22zM10 12h4" {...props}/>;
+const AlertTriangle = (props) => <SvgIcon path="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" {...props}/>;
+const Gauge = (props) => <SvgIcon path="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 12L8.5 8.5M17 12h-5" {...props}/>;
+const Lock = (props) => <SvgIcon path="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4" {...props}/>;
+
+
+// ---------- Simple SVG Charts (reemplazo de Recharts) ----------
+function SimpleBarChart({ data, dataKey, width="100%", height=240, color="#2E75B6" }) {
+  const vals = data.map(d => parseFloat(d[dataKey]) || 0);
+  const maxVal = Math.max(...vals, 1);
+  const barW = 28;
+  const gap = 8;
+  const totalW = data.length * (barW + gap);
+  const chartH = height - 40;
+  return (
+    <div style={{width:"100%", overflowX:"auto"}}>
+      <svg width={Math.max(totalW, 300)} height={height} style={{display:"block",margin:"0 auto"}}>
+        {data.map((d, i) => {
+          const barH = Math.round((vals[i] / maxVal) * chartH);
+          const x = i * (barW + gap) + gap;
+          const y = chartH - barH;
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={barH} rx={4} fill={color} />
+              <text x={x + barW/2} y={chartH + 16} textAnchor="middle" fontSize={10} fill="#64748B">{d.name}</text>
+              {barH > 12 && <text x={x + barW/2} y={y + 12} textAnchor="middle" fontSize={9} fill="white">{vals[i]}</text>}
+            </g>
+          );
+        })}
+        <line x1={0} y1={chartH} x2={totalW} y2={chartH} stroke="#DDE3ED" strokeWidth={1}/>
+      </svg>
+    </div>
+  );
+}
+
+function SimpleLineChart({ data, dataKey, width="100%", height=240, color="#2E7D52" }) {
+  const vals = data.map(d => parseFloat(d[dataKey]) || 0);
+  const maxVal = Math.max(...vals, 1);
+  const minVal = 0;
+  const padL = 32, padR = 12, padT = 12, padB = 30;
+  const W = 480, H = height;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const pts = vals.map((v, i) => {
+    const x = padL + (i / Math.max(vals.length - 1, 1)) * chartW;
+    const y = padT + chartH - ((v - minVal) / (maxVal - minVal)) * chartH;
+    return [x, y];
+  });
+  const polyline = pts.map(p => p.join(",")).join(" ");
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block"}}>
+      <line x1={padL} y1={padT} x2={padL} y2={padT+chartH} stroke="#DDE3ED" strokeWidth={1}/>
+      <line x1={padL} y1={padT+chartH} x2={padL+chartW} y2={padT+chartH} stroke="#DDE3ED" strokeWidth={1}/>
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
+      {pts.map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x} cy={y} r={4} fill={color}/>
+          <text x={x} y={H - 6} textAnchor="middle" fontSize={10} fill="#64748B">{data[i].fecha || data[i].name}</text>
+          <text x={x} y={y - 8} textAnchor="middle" fontSize={9} fill={color}>{vals[i]}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+const PASS_ACCESO = "montajes2026"; // ← Cambia esto por tu contraseña
+
+// ---------- Helpers ----------
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+const parseHora = (h) => { if (!h) return null; const [hh, mm] = h.split(":").map(Number); return hh + mm / 60; };
+const fmtFecha = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const round1 = (n) => Math.round(n * 10) / 10;
+const round2 = (n) => Math.round(n * 100) / 100;
+const blankEtapa = () => ({ id: uid(), ancho: "", largo: "", porticos: "", responsable: "" });
+function projectTotals(p) {
+  if (p?.etapas && p.etapas.length) {
+    const area = p.etapas.reduce((a, e) => a + (parseFloat(e.ancho) || 0) * (parseFloat(e.largo) || 0), 0);
+    const porticos = p.etapas.reduce((a, e) => a + (parseFloat(e.porticos) || 0), 0);
+    return { area, porticos };
+  }
+  return { area: (parseFloat(p?.ancho) || 0) * (parseFloat(p?.longitud) || 0), porticos: parseFloat(p?.porticos) || 0 };
+}
+
+const emptyProject = () => ({
+  id: uid(), nombre: "", cliente: "", ubicacion: "",
+  ancho: "", porticos: "", longitud: "",
+  etapas: [], // [{id, ancho, largo, porticos, responsable}] — opcional, para proyectos ejecutados por etapas
+  horasLV: 10, horasSab: 8, domingoLabora: false, horasDom: 0,
+  cuadrilla: "", supervisor: "",
+  fechaInicioProg: "", fechaFinProg: "",
+  estado: "En curso",
+  resultados: null, // snapshot al finalizar
+});
+
+const seedIncolmotos = () => ({
+  ...emptyProject(),
+  id: uid(),
+  nombre: "Incolmotos Yamaha (ALTIX)",
+  cliente: "Incolmotos Yamaha / Altix",
+  ubicacion: "Planta Incolmotos Yamaha, Girardota, Antioquia",
+  ancho: 30.7, porticos: 24, longitud: 116,
+  etapas: [],
+  horasLV: 10, horasSab: 8, domingoLabora: false, horasDom: 0,
+  cuadrilla: 5, supervisor: "",
+  fechaInicioProg: "2026-05-27", fechaFinProg: "",
+  estado: "En curso",
+});
+
+const seedEntries = (projectId) => ([
+  { id: uid(), fecha: "2026-05-27", fase: "FASE 0", sub: FASES[0].subs[5], horaInicio: "07:00", horaFin: "12:00", personal: 5, responsable: "Egar Acosta", estado: "Completado", obs: "Descargue de materiales con grúa" },
+  { id: uid(), fecha: "2026-05-29", fase: "FASE 1", sub: FASES[1].subs[2], horaInicio: "07:00", horaFin: "17:00", personal: 5, responsable: "Daniel Palacios", estado: "Completado", obs: "" },
+  { id: uid(), fecha: "2026-05-30", fase: "FASE 2", sub: FASES[2].subs[4], horaInicio: "13:00", horaFin: "15:25", personal: 5, responsable: "Nicolas Agudelo", estado: "Completado", obs: "Primer pórtico izado" },
+  { id: uid(), fecha: "2026-06-01", fase: "FASE 2", sub: FASES[2].subs[7], horaInicio: "07:00", horaFin: "17:14", personal: 5, responsable: "José Morillo", estado: "Completado", obs: "" },
+  { id: uid(), fecha: "2026-06-02", fase: "FASE 3", sub: FASES[3].subs[1], horaInicio: "07:00", horaFin: "17:12", personal: 5, responsable: "Yonathan Atencio", estado: "Completado", obs: "" },
+  { id: uid(), fecha: "2026-06-05", fase: "FASE 4", sub: FASES[4].subs[0], horaInicio: "07:00", horaFin: "17:00", personal: 5, responsable: "Egar Acosta", estado: "Completado", obs: "Cortinas laterales" },
+  { id: uid(), fecha: "2026-06-09", fase: "FASE 4", sub: FASES[4].subs[5], horaInicio: "07:00", horaFin: "14:10", personal: 4, responsable: "Daniel Palacios", estado: "Completado", obs: "Lluvia suspende actividad 2:10pm" },
+].map(e => ({ ...e, projectId })));
+
+const seedPostobon = () => ({
+  id: uid(),
+  nombre: "Postobón Malambo",
+  cliente: "Postobón",
+  ubicacion: "Km 3-500 Av. Olivares, Vía Sabanagrande, Malambo, Atlántico",
+  ancho: 15, porticos: 6, longitud: 25,
+  etapas: [],
+  horasLV: 10, horasSab: 8, domingoLabora: false, horasDom: 0,
+  cuadrilla: 5, supervisor: "Estid Mojica",
+  fechaInicioProg: "2026-06-18", fechaFinProg: "2026-06-26",
+  estado: "Completado",
+  resultados: {
+    fechaFinReal: "2026-06-26", diasObraReales: 9,
+    m2dia: 41.67, porticosDia: 0.67, personalProm: 4.9,
+    fases: [
+      { key: "FASE 0", dias: 0.62 }, { key: "FASE 1", dias: 1.86 },
+      { key: "FASE 2", dias: 1.45 }, { key: "FASE 3", dias: 2.07 },
+      { key: "FASE 4", dias: 2.07 }, { key: "FASE 5", dias: 1.03 },
+      { key: "FASE 6", dias: 1.03 }, { key: "FASE 7", dias: 0.21 },
+    ],
+  },
+});
+
+const E2 = (fecha, fase, sub, hi, hf, personal, responsable, estado, obs="") =>
+  ({ id: uid(), fecha, fase, sub, horaInicio: hi, horaFin: hf, personal, responsable, estado, obs });
+
+const seedPostobonEntries = (projectId) => ([
+  E2("2026-06-18","FASE 0","Descargue de materiales con grúa","11:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-19","FASE 1","Unión de piezas con tornillos (torque establecido)","07:00","17:00",4,"Estid Mojica","En curso"),
+  E2("2026-06-20","FASE 1","Unión de piezas con tornillos (torque establecido)","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-20","FASE 1","Instalación sistema keder (rieles superiores)","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-20","FASE 1","Aplicación de masilla Fix All en empates","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-20","FASE 1","Instalación de guayas en los pórticos (pre-izaje)","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-21","FASE 2","Diligenciamiento de permisos y ubicación de grúa","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Señalización y delimitación del área de trabajo","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Limpieza del área para izaje","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Elaboración del plan de izaje de pórticos","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Izaje primer pórtico (amarre de vientos)","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Izaje segundo pórtico","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Ensamble de correas laterales, central e intermedias","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 2","Izaje de pórticos restantes","09:30","14:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 3","Instalación de correas en pórticos restantes","14:00","15:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 3","Arriostrado — instalación de guayas entre pórticos","14:00","15:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 3","Alineación de bodega (demarcación y perforación de lámina)","14:00","15:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 3","Aplicación de Sikadur AnchorFix","14:00","15:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-21","FASE 3","Instalación de espárragos y pernos de anclaje","14:00","15:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-22","FASE 3","Instalación de correas en pórticos restantes","07:00","23:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-22","FASE 3","Arriostrado — instalación de guayas entre pórticos","07:00","23:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-22","FASE 3","Alineación de bodega (demarcación y perforación de lámina)","07:00","23:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-22","FASE 3","Instalación de espárragos y pernos de anclaje","07:00","23:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-22","FASE 4","Instalación de cortinas laterales de PVC","07:00","17:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-22","FASE 4","Instalación de tensores inferiores de cortinas","07:00","17:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-22","FASE 4","Instalación de tubo tensor en bolsillo de lona","07:00","17:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-23","FASE 4","Instalación de cortinas laterales de PVC","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 4","Instalación de tensores inferiores de cortinas","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 4","Posicionamiento de escaleras para guía del techo","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 4","Jalado mecánico del techo (sistema keder)","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 4","Instalación de tubo tensor en bolsillo de lona","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 4","Instalación de solapa de cubrimiento keder","07:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-23","FASE 5","Puerta cortina corrediza — Instalación de riel","07:00","17:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-23","FASE 5","Puerta cortina corrediza — Instalación de cortina en el riel","07:00","17:00",5,"Estid Mojica","En curso"),
+  E2("2026-06-24","FASE 6","Perfilado y sellado perimetral a piso","07:00","17:00",3,"Estid Mojica","Completado"),
+  E2("2026-06-24","FASE 6","Remates y ajustes finales de perfilado","07:00","17:00",3,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 5","Puerta cortina corrediza — Instalación de sistema corredizo","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 5","Puerta cortina corrediza — Instalación de cajas sider","07:00","15:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 7","Limpieza general de obra","15:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 7","Inspección final de calidad (checklist)","15:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 7","Prueba de funcionamiento general (puertas, cortinas, drenajes)","15:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 7","Registro fotográfico de cierre","15:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-25","FASE 7","Firma de acta de entrega con el cliente","15:00","17:00",5,"Estid Mojica","Completado"),
+  E2("2026-06-26","FASE 0","Instalación línea de vida en tractocamión","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 0","Señalización y delimitación de área de acopio/descargue","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 0","Elaboración y validación del plan de izaje (<80% carga)","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 0","Limpieza y despeje del área de trabajo","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 0","Instalación de aparejos/eslingas en las piezas","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 0","Posicionamiento de piezas en el punto de armado","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 1","Ubicación de piezas en líneas de anclaje según planos","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 1","Colocación de tacos de madera y armado en piso","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Señalización y delimitación del área de trabajo","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Limpieza del área para izaje","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Diligenciamiento de permisos y ubicación de grúa","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Elaboración del plan de izaje de pórticos","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Izaje primer pórtico (amarre de vientos)","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Izaje segundo pórtico","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Ensamble de correas laterales, central e intermedias","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 2","Izaje de pórticos restantes","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 3","Aplicación de Sikadur AnchorFix","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 3","Perforación de placa / dados de concreto","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta cortina corrediza — Instalación de riel","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta cortina corrediza — Instalación de cortina en el riel","00:00","00:00","","","Completado","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta rígida — Armado de marcos (soldadura, pulido y pintura)","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta rígida — Instalación de platina para riel de piso","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta rígida — Instalación de lona en marco","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 5","Puerta rígida — Instalación y alineación de puerta en rieles","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 6","Instalación de soportes de canoa","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 6","Instalación de canoas de recolección de aguas","00:00","00:00","","","No aplica","Cierre de proyecto"),
+  E2("2026-06-26","FASE 6","Instalación de bajantes","00:00","00:00","","","No aplica","Cierre de proyecto"),
+].map(e => ({ ...e, projectId })));
+function PorticoIcon({ size = 22, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 36" fill="none">
+      <path d="M4 32 L24 6 L44 32" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 32 L4 22 M44 32 L44 22" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      <path d="M11 23 L24 14 L37 23" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.55" />
+    </svg>
+  );
+}
+
+function Card({ children, className = "", style = {}, ...rest }) {
+  return (
+    <div className={`rounded-xl shadow-sm ${className}`} style={{ background: CARD, border: `1px solid ${LINE}`, ...style }} {...rest}>
+      {children}
+    </div>
+  );
+}
+
+function KpiCard({ icon, label, value, sub, accent = NAVY }) {
+  return (
+    <Card className="p-4 flex flex-col gap-1 min-w-[150px]">
+      <div className="flex items-center gap-2" style={{ color: accent }}>
+        {icon}
+        <span className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: MUTED, fontFamily: "Inter, sans-serif" }}>{label}</span>
+      </div>
+      <div className="text-2xl font-bold" style={{ color: SLATE, fontFamily: "'Space Grotesk', sans-serif" }}>{value}</div>
+      {sub && <div className="text-xs" style={{ color: MUTED }}>{sub}</div>}
+    </Card>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="font-medium" style={{ color: SLATE }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+const inputCls = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition";
+const inputStyle = { borderColor: LINE, color: SLATE };
+
+function Pill({ children, color }) {
+  return <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${color}1A`, color }}>{children}</span>;
+}
+
+// ---------- Main App ----------
+function App() {
+  // ---- Todos los hooks al inicio (React Rules of Hooks) ----
+  const [auth, setAuth] = React.useState(false);
+  const [passInput, setPassInput] = React.useState("");
+  const [passError, setPassError] = React.useState(false);
+  const [projects, setProjects] = React.useState([]);
+  const [selectedId, setSelectedId] = React.useState(null);
+  const [entries, setEntries] = React.useState([]);
+  const [tab, setTab] = React.useState("proyectos");
+  const [loading, setLoading] = React.useState(true);
+  const [draft, setDraft] = React.useState(emptyProject());
+  const [showNewForm, setShowNewForm] = React.useState(false);
+  const blankFila = () => ({
+    id: uid(), fase: FASES[0].key, subs: [],
+    horaInicio: "07:00", horaFin: "12:00", personal: "", responsable: "", estado: "En curso", obs: "",
+  });
+  const [fechaRegistro, setFechaRegistro] = React.useState(new Date().toISOString().slice(0, 10));
+  const [filas, setFilas] = React.useState([blankFila()]);
+  const [filtroFase, setFiltroFase] = React.useState("TODAS");
+
+  const handleLogin = () => {
+    if (passInput === PASS_ACCESO) { setAuth(true); }
+    else { setPassError(true); setTimeout(() => setPassError(false), 2000); }
+  };
+
+  // ---- TODOS los React.useEffect y React.useMemo ANTES de cualquier return condicional ----
+  // (React Rules of Hooks: nunca llames hooks después de un return condicional)
+
+  React.useEffect(() => {
+    if (!auth) return; // Guard: solo corre cuando está autenticado
+    document.title = "Bitácora de Montaje — ALTIX";
+    (async () => {
+      const p = await loadProjects();
+      setProjects(p);
+      if (p.length) setSelectedId(p[0].id);
+      setLoading(false);
+    })();
+  }, [auth]); // Depende de auth para correr al hacer login
+
+  React.useEffect(() => {
+    if (!auth) return;
+    if (!selectedId) { setEntries([]); return; }
+    (async () => setEntries(await loadEntries(selectedId)))();
+  }, [auth, selectedId]);
+
+  const selected = projects.find((p) => p.id === selectedId) || null;
+
+  React.useEffect(() => {
+    if (!auth) return;
+    if (selected) setDraft(selected);
+  }, [auth, selectedId]);
+
+  const stats = React.useMemo(() => {
+    if (!auth || !selected) return null;
+    const { area, porticos: porticosTotal } = projectTotals(selected);
+    const lv = parseFloat(selected.horasLV) || 0;
+    const sab = parseFloat(selected.horasSab) || 0;
+    const dom = selected.domingoLabora ? (parseFloat(selected.horasDom) || 0) : 0;
+    const diasSemana = selected.domingoLabora ? 7 : 6;
+    const jornadaProm = (lv * 5 + sab + dom) / diasSemana || 1;
+
+    const horasPorFase = {};
+    FASES.forEach((f) => (horasPorFase[f.key] = 0));
+    const fechasSet = new Set();
+    entries.forEach((e) => {
+      const d = parseHora(e.horaFin) - parseHora(e.horaInicio);
+      if (!isNaN(d) && d > 0) horasPorFase[e.fase] = (horasPorFase[e.fase] || 0) + d;
+      if (e.fecha) fechasSet.add(e.fecha);
+    });
+
+    const latestBySub = {};
+    entries.forEach((e) => {
+      const k = `${e.fase}|||${e.sub}`;
+      if (!latestBySub[k] || e.fecha >= latestBySub[k].fecha) latestBySub[k] = e;
+    });
+    const completadas = Object.values(latestBySub).filter((e) => e.estado === "Completado").length;
+    const noAplica = Object.values(latestBySub).filter((e) => e.estado === "No aplica").length;
+    const aplicables = Math.max(TOTAL_SUBACTIVIDADES - noAplica, 0);
+    const porcentaje = aplicables ? completadas / aplicables : (TOTAL_SUBACTIVIDADES ? 1 : 0);
+
+    const fasesStats = FASES.map((f) => {
+      const totalSubs = f.subs.length;
+      const completadasFase = f.subs.filter((s) => latestBySub[`${f.key}|||${s}`]?.estado === "Completado").length;
+      const noAplicaFase = f.subs.filter((s) => latestBySub[`${f.key}|||${s}`]?.estado === "No aplica").length;
+      const aplicablesFase = Math.max(totalSubs - noAplicaFase, 0);
+      return {
+        key: f.key, nombre: f.nombre,
+        horas: round1(horasPorFase[f.key] || 0),
+        dias: round2((horasPorFase[f.key] || 0) / jornadaProm),
+        completadas: completadasFase, totalSubs, noAplicaFase, aplicablesFase,
+        pct: aplicablesFase ? completadasFase / aplicablesFase : 1,
+      };
+    });
+
+    const pendientes = [];
+    FASES.forEach((f) => f.subs.forEach((s) => {
+      const last = latestBySub[`${f.key}|||${s}`];
+      const estadoActual = last ? last.estado : "Sin registro";
+      if (estadoActual !== "Completado" && estadoActual !== "No aplica") {
+        pendientes.push({ fase: f.key, faseNombre: f.nombre, sub: s, estadoActual });
+      }
+    }));
+
+    const diasObraReales = fechasSet.size;
+    const personalVals = entries.map((e) => parseFloat(e.personal)).filter((n) => !isNaN(n) && n > 0);
+    const personalProm = personalVals.length ? personalVals.reduce((a, b) => a + b, 0) / personalVals.length : null;
+    const m2dia = diasObraReales > 0 ? area / diasObraReales : null;
+    const porticosDia = diasObraReales > 0 ? porticosTotal / diasObraReales : null;
+
+    const fechasOrdenadas = [...fechasSet].sort();
+    const tendencia = fechasOrdenadas.map((fecha) => {
+      const completadasHasta = Object.values(latestBySub).filter((e) => e.estado === "Completado" && e.fecha <= fecha).length;
+      return { fecha: fecha.slice(5), avance: round1((completadasHasta / Math.max(aplicables, 1)) * 100) };
+    });
+
+    return { area, porticosTotal, jornadaProm, fasesStats, completadas, noAplica, aplicables, porcentaje, diasObraReales, personalProm, m2dia, porticosDia, tendencia, pendientes };
+  }, [auth, selected, entries]);
+
+  if (!auth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: BG }}>
+        <div className="rounded-2xl shadow-lg p-8 w-full max-w-sm" style={{ background: CARD, border: `1px solid ${LINE}` }}>
+          <div className="flex justify-center mb-5">
+            <div className="rounded-lg px-3 py-2" style={{ background: NAVY }}>
+              <img src={ALTIX_LOGO} alt="ALTIX" style={{ height: 36, width: "auto" }} />
+            </div>
+          </div>
+          <div className="text-center mb-5">
+            <div className="font-bold text-lg" style={{ color: NAVY, fontFamily: "'Space Grotesk', sans-serif" }}>Bitácora de Montaje</div>
+            <div className="text-sm" style={{ color: MUTED }}>Plastextil S.A.S. — Ingeniería y Cubrimiento</div>
+          </div>
+          <div className="flex flex-col gap-3">
+            <label className="text-sm font-medium" style={{ color: SLATE }}>
+              <div className="flex items-center gap-1.5 mb-1"><Lock size={14} /> Contraseña de acceso</div>
+              <input type="password" className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2"
+                style={{ borderColor: passError ? "#C0392B" : LINE, color: SLATE }}
+                value={passInput} onChange={e => setPassInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                placeholder="Ingresa la contraseña..." />
+            </label>
+            {passError && <div className="text-xs text-center" style={{ color: "#C0392B" }}>Contraseña incorrecta</div>}
+            <button onClick={handleLogin} className="w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ background: NAVY }}>
+              Ingresar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Actions ----------
+  const handleCreateProject = async () => {
+    if (!draft.nombre.trim()) return;
+    const np = { ...emptyProject(), ...draft, id: uid() };
+    const updated = [...projects, np];
+    setProjects(updated); await saveProjects(updated);
+    setDraft(np);           // ← poblar draft con el proyecto recién creado
+    setSelectedId(np.id);
+    setShowNewForm(false);
+    setTab("datos");
+  };
+
+  const handleSaveProject = async () => {
+    const updated = projects.map((p) => (p.id === selected.id ? { ...draft } : p));
+    setProjects(updated); await saveProjects(updated);
+  };
+
+  const handleLoadDemo = async () => {
+    const proj = seedIncolmotos();
+    const updatedP = [...projects, proj];
+    setProjects(updatedP); await saveProjects(updatedP);
+    const ents = seedEntries(proj.id);
+    await saveEntries(proj.id, ents);
+    setSelectedId(proj.id); setTab("dashboard");
+  };
+
+  const handleLoadPostobon = async () => {
+    const proj = seedPostobon();
+    const updatedP = [...projects, proj];
+    setProjects(updatedP); await saveProjects(updatedP);
+    const ents = seedPostobonEntries(proj.id);
+    await saveEntries(proj.id, ents);
+    setSelectedId(proj.id); setTab("dashboard");
+  };
+
+  const updateFila = (id, patch) => setFilas((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  const addFila = () => setFilas((prev) => [...prev, blankFila()]);
+  const removeFila = (id) => setFilas((prev) => (prev.length > 1 ? prev.filter((f) => f.id !== id) : prev));
+
+  const handleGuardarDia = async () => {
+    if (!fechaRegistro) return;
+    const validas = filas.filter((f) => f.subs && f.subs.length);
+    if (!validas.length) return;
+    const nuevas = validas.flatMap((f) =>
+      f.subs.map((s) => {
+        const { subs, ...rest } = f;
+        return { ...rest, sub: s, fecha: fechaRegistro, projectId: selected.id, id: uid() };
+      })
+    );
+    const updated = [...entries, ...nuevas];
+    setEntries(updated); await saveEntries(selected.id, updated);
+    setFilas([blankFila()]);
+  };
+
+  const handleDeleteEntry = async (id) => {
+    const updated = entries.filter((e) => e.id !== id);
+    setEntries(updated); await saveEntries(selected.id, updated);
+  };
+
+  const handleResolverSub = async (fase, sub, nuevoEstado) => {
+    const e = {
+      id: uid(), projectId: selected.id, fecha: new Date().toISOString().slice(0, 10),
+      fase, sub, horaInicio: "00:00", horaFin: "00:00", personal: "", responsable: "",
+      estado: nuevoEstado, obs: "Cierre de proyecto",
+    };
+    const updated = [...entries, e];
+    setEntries(updated); await saveEntries(selected.id, updated);
+  };
+
+  const handleFinalizar = async () => {
+    if (!stats) return;
+    const resultados = {
+      fechaFinReal: [...entries].map((e) => e.fecha).sort().slice(-1)[0] || null,
+      diasObraReales: stats.diasObraReales,
+      m2dia: stats.m2dia, porticosDia: stats.porticosDia,
+      fases: stats.fasesStats.map((f) => ({ key: f.key, dias: f.dias })),
+      personalProm: stats.personalProm,
+    };
+    const updated = projects.map((p) => (p.id === selected.id ? { ...p, estado: "Completado", resultados } : p));
+    setProjects(updated); await saveProjects(updated);
+    setDraft({ ...selected, estado: "Completado", resultados });
+  };
+
+  // ---------- Render ----------
+  const NAV = [
+    { id: "proyectos", label: "Proyectos", icon: <FolderKanban size={16} /> },
+    { id: "datos", label: "Datos del proyecto", icon: <Building2 size={16} /> },
+    { id: "seguimiento", label: "Seguimiento diario", icon: <ListChecks size={16} /> },
+    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
+    { id: "historico", label: "Histórico", icon: <Archive size={16} /> },
+  ];
+
+  return (
+    <div className="w-full min-h-[700px]" style={{ background: BG, fontFamily: "Inter, sans-serif", color: SLATE }}>
+      {/* Header */}
+      <div className="px-5 py-4 flex items-center justify-between" style={{ background: NAVY }}>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg flex items-center justify-center px-2 py-1.5" style={{ background: "#FFFFFF" }}>
+            <img src={ALTIX_LOGO} alt="ALTIX" style={{ height: 30, width: "auto", display: "block" }} />
+          </div>
+          <div>
+            <div className="text-white font-bold text-lg leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Bitácora de Montaje</div>
+            <div className="text-[11px]" style={{ color: "#B9C7E0" }}>Plastextil S.A.S. — Ingeniería y Cubrimiento</div>
+          </div>
+        </div>
+        {selected && (
+          <div className="text-right hidden sm:block">
+            <div className="text-white text-sm font-semibold">{selected.nombre}</div>
+            <div className="text-[11px]" style={{ color: "#B9C7E0" }}>{selected.ubicacion || "Ubicación sin definir"}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Nav tabs */}
+      <div className="flex gap-1 px-4 pt-3 overflow-x-auto" style={{ background: NAVY }}>
+        {NAV.map((n) => (
+          <button key={n.id} onClick={() => setTab(n.id)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg text-sm font-semibold whitespace-nowrap transition"
+            style={{
+              background: tab === n.id ? BG : "transparent",
+              color: tab === n.id ? NAVY : "#CBD8EE",
+            }}>
+            {n.icon}{n.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-5 max-w-6xl mx-auto">
+        {loading ? (
+          <div className="text-center py-20" style={{ color: MUTED }}>Cargando...</div>
+        ) : tab === "proyectos" ? (
+          <ProyectosTab
+            projects={projects} selectedId={selectedId} setSelectedId={setSelectedId} setTab={setTab}
+            showNewForm={showNewForm} setShowNewForm={setShowNewForm}
+            draft={draft} setDraft={setDraft} onCreate={handleCreateProject} onLoadDemo={handleLoadDemo} onLoadPostobon={handleLoadPostobon}
+          />
+        ) : !selected ? (
+          <EmptyState setTab={setTab} setShowNewForm={setShowNewForm} />
+        ) : tab === "datos" ? (
+          <DatosTab draft={draft} setDraft={setDraft} onSave={handleSaveProject} stats={stats} />
+        ) : tab === "seguimiento" ? (
+          <SeguimientoTab
+            fechaRegistro={fechaRegistro} setFechaRegistro={setFechaRegistro}
+            filas={filas} updateFila={updateFila} addFila={addFila} removeFila={removeFila}
+            onGuardar={handleGuardarDia}
+            entries={entries} onDelete={handleDeleteEntry}
+            filtroFase={filtroFase} setFiltroFase={setFiltroFase}
+          />
+        ) : tab === "dashboard" ? (
+          <DashboardTab selected={selected} stats={stats} onFinalizar={handleFinalizar} onResolverSub={handleResolverSub} />
+        ) : (
+          <HistoricoTab projects={projects} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Tabs ----------
+function EmptyState({ setTab, setShowNewForm }) {
+  return (
+    <Card className="p-10 text-center">
+      <Building2 size={32} style={{ color: MUTED, margin: "0 auto" }} />
+      <div className="mt-3 font-semibold" style={{ color: SLATE }}>No tienes un proyecto seleccionado</div>
+      <div className="text-sm mt-1" style={{ color: MUTED }}>Crea o elige un proyecto en la pestaña Proyectos para continuar.</div>
+      <button onClick={() => setTab("proyectos")} className="mt-4 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: STEEL }}>
+        Ir a Proyectos
+      </button>
+    </Card>
+  );
+}
+
+function ProyectosTab({ projects, selectedId, setSelectedId, setTab, showNewForm, setShowNewForm, draft, setDraft, onCreate, onLoadDemo, onLoadPostobon }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Proyectos</h2>
+        <div className="flex gap-2">
+          <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
+            <button onClick={onLoadDemo} className="px-3 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: STEEL, color: STEEL }}>
+              + Incolmotos Yamaha (demo)
+            </button>
+            <button onClick={onLoadPostobon} className="px-3 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: GREEN, color: GREEN }}>
+              + Postobón Malambo
+            </button>
+            <label className="px-3 py-2 rounded-lg text-sm font-semibold border cursor-pointer" style={{ borderColor: '#2E7D52', color: '#2E7D52' }}>
+              ↑ Importar desde JSON
+              <input type="file" accept=".json" style={{display:'none'}} onChange={async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const text = await file.text();
+                try {
+                  const n = await importarDatos(text);
+                  alert('✅ ' + n + ' proyecto(s) importado(s) correctamente. Recarga la página.');
+                } catch(err) {
+                  alert('❌ ' + err.message);
+                }
+                e.target.value = '';
+              }}/>
+            </label>
+          </div>
+          <button onClick={() => setShowNewForm((v) => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: NAVY }}>
+            <Plus size={16} /> Nuevo proyecto
+          </button>
+        </div>
+      </div>
+
+      {showNewForm && (
+        <Card className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Field label="Nombre / Código del proyecto">
+              <input className={inputCls} style={inputStyle} value={draft.nombre} onChange={(e) => setDraft({ ...draft, nombre: e.target.value })} placeholder="Ej: MO-22-2026-014" />
+            </Field>
+            <Field label="Cliente">
+              <input className={inputCls} style={inputStyle} value={draft.cliente} onChange={(e) => setDraft({ ...draft, cliente: e.target.value })} />
+            </Field>
+            <Field label="Ubicación">
+              <input className={inputCls} style={inputStyle} value={draft.ubicacion} onChange={(e) => setDraft({ ...draft, ubicacion: e.target.value })} />
+            </Field>
+            <Field label="Ancho (m)">
+              <input type="number" className={inputCls} style={inputStyle} value={draft.ancho} onChange={(e) => setDraft({ ...draft, ancho: e.target.value })} />
+            </Field>
+            <Field label="N° de pórticos">
+              <input type="number" className={inputCls} style={inputStyle} value={draft.porticos} onChange={(e) => setDraft({ ...draft, porticos: e.target.value })} />
+            </Field>
+            <Field label="Longitud (m)">
+              <input type="number" className={inputCls} style={inputStyle} value={draft.longitud} onChange={(e) => setDraft({ ...draft, longitud: e.target.value })} />
+            </Field>
+          </div>
+          <div className="flex justify-end mt-3">
+            <button onClick={onCreate} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: GREEN }}>Crear proyecto</button>
+          </div>
+        </Card>
+      )}
+
+      {projects.length === 0 && !showNewForm && (
+        <Card className="p-10 text-center">
+          <FolderKanban size={28} style={{ color: MUTED, margin: "0 auto" }} />
+          <div className="mt-2 text-sm" style={{ color: MUTED }}>Aún no tienes proyectos. Crea uno nuevo o carga el de ejemplo.</div>
+        </Card>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-3">
+        {projects.map((p) => (
+          <Card key={p.id} className={`p-4 cursor-pointer transition`} style={{ borderColor: selectedId === p.id ? STEEL : LINE, borderWidth: selectedId === p.id ? 2 : 1 }}
+            onClick={() => { setSelectedId(p.id); setTab("dashboard"); }}>
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="font-bold" style={{ color: NAVY }}>{p.nombre || "(sin nombre)"}</div>
+                <div className="text-xs flex items-center gap-1 mt-0.5" style={{ color: MUTED }}><MapPin size={12} />{p.ubicacion || "Ubicación sin definir"}</div>
+              </div>
+              <Pill color={p.estado === "Completado" ? GREEN : STEEL}>{p.estado}</Pill>
+            </div>
+            <div className="flex gap-4 mt-3 text-xs" style={{ color: MUTED }}>
+              {p.etapas && p.etapas.length ? (
+                <>
+                  <span className="flex items-center gap-1"><Ruler size={12} />{round1(projectTotals(p).area)} m² ({p.etapas.length} etapas)</span>
+                  <span className="flex items-center gap-1"><PorticoIcon size={13} color={MUTED} />{projectTotals(p).porticos} pórticos</span>
+                </>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1"><Ruler size={12} />{p.ancho || "—"}m × {p.longitud || "—"}m</span>
+                  <span className="flex items-center gap-1"><PorticoIcon size={13} color={MUTED} />{p.porticos || "—"} pórticos</span>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end mt-2"><ChevronRight size={16} style={{ color: STEEL }} /></div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EtapaRow({ etapa, index, onChange, onRemove, canRemove }) {
+  return (
+    <div className="rounded-lg p-3 mb-2" style={{ background: BG }}>
+      <div className="grid md:grid-cols-5 gap-3 items-end">
+        <div className="text-sm font-bold" style={{ color: NAVY }}>Etapa {index + 1}</div>
+        <Field label="Ancho (m)"><input type="number" className={inputCls} style={inputStyle} value={etapa.ancho} onChange={(e) => onChange({ ancho: e.target.value })} /></Field>
+        <Field label="Largo (m)"><input type="number" className={inputCls} style={inputStyle} value={etapa.largo} onChange={(e) => onChange({ largo: e.target.value })} /></Field>
+        <Field label="N° de pórticos"><input type="number" className={inputCls} style={inputStyle} value={etapa.porticos} onChange={(e) => onChange({ porticos: e.target.value })} /></Field>
+        <Field label="Responsable">
+          <select className={inputCls} style={inputStyle} value={etapa.responsable || ""} onChange={(e) => onChange({ responsable: e.target.value })}>
+            <option value="">Selecciona...</option>
+            {RESPONSABLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="flex justify-between items-center mt-2">
+        <div className="text-xs" style={{ color: MUTED }}>
+          Área: {round1((parseFloat(etapa.ancho) || 0) * (parseFloat(etapa.largo) || 0))} m²
+        </div>
+        {canRemove && (
+          <button onClick={onRemove} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border" style={{ borderColor: "#C0392B", color: "#C0392B" }}>
+            <Trash2 size={13} /> Quitar etapa
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DatosTab({ draft, setDraft, onSave, stats }) {
+  const tieneEtapas = draft.etapas && draft.etapas.length > 0;
+  const totales = projectTotals(draft);
+  const addEtapa = () => setDraft({ ...draft, etapas: [...(draft.etapas || []), blankEtapa()] });
+  const updateEtapa = (id, patch) => setDraft({ ...draft, etapas: draft.etapas.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+  const removeEtapa = (id) => setDraft({ ...draft, etapas: draft.etapas.filter((e) => e.id !== id) });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Datos del proyecto</h2>
+      <Card className="p-5">
+        <div className="grid md:grid-cols-3 gap-4">
+          <Field label="Nombre / Código"><input className={inputCls} style={inputStyle} value={draft.nombre || ""} onChange={(e) => setDraft({ ...draft, nombre: e.target.value })} /></Field>
+          <Field label="Cliente"><input className={inputCls} style={inputStyle} value={draft.cliente || ""} onChange={(e) => setDraft({ ...draft, cliente: e.target.value })} /></Field>
+          <Field label="Ubicación"><input className={inputCls} style={inputStyle} value={draft.ubicacion || ""} onChange={(e) => setDraft({ ...draft, ubicacion: e.target.value })} /></Field>
+          <Field label={tieneEtapas ? "Ancho (m) — suma de etapas" : "Ancho (m)"}>
+            <input disabled={tieneEtapas} type="number" className={inputCls} style={tieneEtapas ? { ...inputStyle, background: BG } : inputStyle}
+              value={tieneEtapas ? "Varía por etapa" : (draft.ancho || "")} onChange={(e) => setDraft({ ...draft, ancho: e.target.value })} />
+          </Field>
+          <Field label={tieneEtapas ? "N° de pórticos (total)" : "N° de pórticos"}>
+            <input disabled={tieneEtapas} type="number" className={inputCls} style={tieneEtapas ? { ...inputStyle, background: BG } : inputStyle}
+              value={tieneEtapas ? totales.porticos : (draft.porticos || "")} onChange={(e) => setDraft({ ...draft, porticos: e.target.value })} />
+          </Field>
+          <Field label={tieneEtapas ? "Longitud (m) — suma de etapas" : "Longitud (m)"}>
+            <input disabled={tieneEtapas} type="number" className={inputCls} style={tieneEtapas ? { ...inputStyle, background: BG } : inputStyle}
+              value={tieneEtapas ? "Varía por etapa" : (draft.longitud || "")} onChange={(e) => setDraft({ ...draft, longitud: e.target.value })} />
+          </Field>
+          <Field label="Área total (m²)"><input disabled className={inputCls} style={{ ...inputStyle, background: BG }} value={round1(totales.area)} /></Field>
+          <Field label="Cuadrilla asignada (N°)"><input type="number" className={inputCls} style={inputStyle} value={draft.cuadrilla || ""} onChange={(e) => setDraft({ ...draft, cuadrilla: e.target.value })} /></Field>
+          <Field label="Responsable del proyecto">
+            <select className={inputCls} style={inputStyle} value={draft.supervisor || ""} onChange={(e) => setDraft({ ...draft, supervisor: e.target.value })}>
+              <option value="">Selecciona...</option>
+              {RESPONSABLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${LINE}` }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm font-bold" style={{ color: NAVY }}>Etapas del proyecto</div>
+            <button onClick={addEtapa} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border" style={{ borderColor: STEEL, color: STEEL }}>
+              <Plus size={14} /> Agregar etapa
+            </button>
+          </div>
+          <div className="text-xs mb-3" style={{ color: MUTED }}>
+            Si este proyecto se ejecuta por etapas, agrégalas aquí con su propia medida y responsable. El ancho, longitud y pórticos totales se calculan sumando todas las etapas.
+          </div>
+          {tieneEtapas ? (
+            draft.etapas.map((etapa, i) => (
+              <EtapaRow key={etapa.id} etapa={etapa} index={i}
+                onChange={(patch) => updateEtapa(etapa.id, patch)}
+                onRemove={() => removeEtapa(etapa.id)}
+                canRemove={true} />
+            ))
+          ) : (
+            <div className="text-xs italic" style={{ color: MUTED }}>Sin etapas — el proyecto se maneja con una sola medida (ancho/longitud/pórticos arriba).</div>
+          )}
+        </div>
+
+        <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${LINE}` }}>
+          <div className="text-sm font-bold mb-3" style={{ color: NAVY }}>Horario laboral</div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <Field label="Horas/día Lunes a Viernes"><input type="number" className={inputCls} style={inputStyle} value={draft.horasLV ?? 10} onChange={(e) => setDraft({ ...draft, horasLV: e.target.value })} /></Field>
+            <Field label="Horas/día Sábado"><input type="number" className={inputCls} style={inputStyle} value={draft.horasSab ?? 8} onChange={(e) => setDraft({ ...draft, horasSab: e.target.value })} /></Field>
+            <Field label="¿Se labora el domingo?">
+              <select className={inputCls} style={inputStyle} value={draft.domingoLabora ? "si" : "no"}
+                onChange={(e) => setDraft({ ...draft, domingoLabora: e.target.value === "si" })}>
+                <option value="no">No — domingo no laboral</option>
+                <option value="si">Sí — domingo laboral</option>
+              </select>
+            </Field>
+            {draft.domingoLabora ? (
+              <Field label="Horas/día Domingo"><input type="number" className={inputCls} style={inputStyle} value={draft.horasDom ?? 0} onChange={(e) => setDraft({ ...draft, horasDom: e.target.value })} /></Field>
+            ) : (
+              <Field label="Domingo"><input disabled className={inputCls} style={{ ...inputStyle, background: BG }} value="No laboral" /></Field>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${LINE}` }}>
+          <div className="text-sm font-bold mb-3" style={{ color: NAVY }}>Fechas programadas</div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <Field label="Fecha inicio programada"><input type="date" className={inputCls} style={inputStyle} value={draft.fechaInicioProg || ""} onChange={(e) => setDraft({ ...draft, fechaInicioProg: e.target.value })} /></Field>
+            <Field label="Fecha fin programada"><input type="date" className={inputCls} style={inputStyle} value={draft.fechaFinProg || ""} onChange={(e) => setDraft({ ...draft, fechaFinProg: e.target.value })} /></Field>
+            <Field label="Estado del proyecto">
+              <select className={inputCls} style={inputStyle} value={draft.estado || "En curso"} onChange={(e) => setDraft({ ...draft, estado: e.target.value })}>
+                {["En curso", "Completado", "Suspendido", "Reprogramado"].map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-5">
+          <button onClick={onSave} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: GREEN }}>
+            <Save size={16} /> Guardar cambios
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function FilaActividad({ fila, onChange, onRemove, canRemove }) {
+  const faseObj = FASES.find((f) => f.key === fila.fase) || FASES[0];
+  const [open, setOpen] = React.useState(false);
+  const toggleSub = (s) => {
+    const exists = fila.subs.includes(s);
+    onChange({ subs: exists ? fila.subs.filter((x) => x !== s) : [...fila.subs, s] });
+  };
+  return (
+    <div className="rounded-lg p-3 mb-2" style={{ background: BG }}>
+      <div className="grid md:grid-cols-4 gap-3">
+        <Field label="Fase">
+          <select className={inputCls} style={inputStyle} value={fila.fase}
+            onChange={(e) => { onChange({ fase: e.target.value, subs: [] }); setOpen(false); }}>
+            {FASES.map((f) => <option key={f.key} value={f.key}>{f.key.replace("FASE ", "Fase ")} — {f.nombre}</option>)}
+          </select>
+        </Field>
+        <div className="md:col-span-2">
+          <Field label={`Sub-actividades${fila.subs.length ? ` (${fila.subs.length} seleccionadas)` : ""}`}>
+            <button type="button" onClick={() => setOpen((v) => !v)}
+              className={`${inputCls} w-full text-left flex items-center justify-between gap-2`} style={inputStyle}>
+              <span className="truncate" style={{ color: fila.subs.length ? SLATE : MUTED }}>
+                {fila.subs.length ? fila.subs.join(" · ") : "Selecciona una o varias..."}
+              </span>
+              <ChevronRight size={14} style={{ color: MUTED, transform: open ? "rotate(90deg)" : "rotate(0deg)", flexShrink: 0 }} />
+            </button>
+          </Field>
+          {open && (
+            <div className="z-20 mt-1 w-full rounded-lg shadow-lg max-h-60 overflow-y-auto p-2" style={{ background: CARD, border: `1px solid ${LINE}` }}>
+              {(() => {
+                let lastGroup = null;
+                return faseObj.subs.map((s) => {
+                  const [grupo, resto] = s.includes(" — ") ? s.split(" — ") : [null, s];
+                  const showHeader = grupo && grupo !== lastGroup;
+                  lastGroup = grupo;
+                  return (
+                    <div key={s}>
+                      {showHeader && (
+                        <div className="px-2 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wide" style={{ color: STEEL }}>{grupo}</div>
+                      )}
+                      <label className="flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: SLATE }}>
+                        <input type="checkbox" checked={fila.subs.includes(s)} onChange={() => toggleSub(s)} className="mt-0.5" />
+                        <span>{resto}</span>
+                      </label>
+                    </div>
+                  );
+                });
+              })()}
+              <button onClick={() => setOpen(false)} className="w-full mt-1 text-xs font-semibold py-1.5 rounded text-white" style={{ background: NAVY }}>
+                Listo
+              </button>
+            </div>
+          )}
+        </div>
+        <Field label="Estado">
+          <select className={inputCls} style={inputStyle} value={fila.estado} onChange={(e) => onChange({ estado: e.target.value })}>
+            {ESTADOS.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="Hora inicio"><input type="time" className={inputCls} style={inputStyle} value={fila.horaInicio} onChange={(e) => onChange({ horaInicio: e.target.value })} /></Field>
+        <Field label="Hora fin"><input type="time" className={inputCls} style={inputStyle} value={fila.horaFin} onChange={(e) => onChange({ horaFin: e.target.value })} /></Field>
+        <Field label="# Personal"><input type="number" className={inputCls} style={inputStyle} value={fila.personal} onChange={(e) => onChange({ personal: e.target.value })} /></Field>
+        <Field label="Responsable"><input className={inputCls} style={inputStyle} value={fila.responsable} onChange={(e) => onChange({ responsable: e.target.value })} /></Field>
+        <div className="md:col-span-3">
+          <Field label="Observaciones"><input className={inputCls} style={inputStyle} value={fila.obs} onChange={(e) => onChange({ obs: e.target.value })} /></Field>
+        </div>
+        <div className="flex items-end justify-end">
+          {canRemove && (
+            <button onClick={onRemove} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: "#C0392B", color: "#C0392B" }}>
+              <Trash2 size={14} /> Quitar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, addFila, removeFila, onGuardar, entries, onDelete, filtroFase, setFiltroFase }) {
+  const filtered = (filtroFase === "TODAS" ? entries : entries.filter((e) => e.fase === filtroFase))
+    .slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const fasesEnUso = new Set(filas.map((f) => f.fase)).size;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Seguimiento diario</h2>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <Field label="Fecha del registro">
+            <input type="date" className={inputCls} style={inputStyle} value={fechaRegistro} onChange={(e) => setFechaRegistro(e.target.value)} />
+          </Field>
+          {fasesEnUso > 1 && (
+            <Pill color={AMBER}>{fasesEnUso} fases en paralelo este día</Pill>
+          )}
+        </div>
+
+        <div className="text-xs mb-2" style={{ color: MUTED }}>
+          Agrega una fila por cada actividad realizada este día — pueden ser de fases distintas si el equipo trabajó en paralelo.
+        </div>
+
+        {filas.map((fila) => (
+          <FilaActividad
+            key={fila.id}
+            fila={fila}
+            onChange={(patch) => updateFila(fila.id, patch)}
+            onRemove={() => removeFila(fila.id)}
+            canRemove={filas.length > 1}
+          />
+        ))}
+
+        <div className="flex items-center gap-2 mt-2">
+          <button onClick={addFila} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: STEEL, color: STEEL }}>
+            <Plus size={15} /> Agregar otra actividad en paralelo
+          </button>
+          <button onClick={onGuardar} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: NAVY }}>
+            <Save size={16} /> Guardar registros del día
+          </button>
+        </div>
+      </Card>
+
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold" style={{ color: SLATE }}>Registros ({filtered.length})</div>
+        <select className={`${inputCls} text-xs`} style={inputStyle} value={filtroFase} onChange={(e) => setFiltroFase(e.target.value)}>
+          <option value="TODAS">Todas las fases</option>
+          {FASES.map((f) => <option key={f.key} value={f.key}>{f.key.replace("FASE ", "Fase ")}</option>)}
+        </select>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto max-h-[420px]">
+          <table className="w-full text-sm">
+            <thead style={{ background: BG }}>
+              <tr>
+                {["Fecha", "Fase", "Sub-actividad", "Horario", "Personal", "Responsable", "Estado", ""].map((h) => (
+                  <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((e) => (
+                <tr key={e.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                  <td className="px-3 py-2 whitespace-nowrap">{fmtFecha(e.fecha)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{e.fase.replace("FASE ", "F")}</td>
+                  <td className="px-3 py-2 max-w-[260px]">{e.sub}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{e.horaInicio}–{e.horaFin}</td>
+                  <td className="px-3 py-2 text-center">{e.personal || "—"}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{e.responsable || "—"}</td>
+                  <td className="px-3 py-2"><Pill color={ESTADO_COLOR[e.estado]}>{e.estado}</Pill></td>
+                  <td className="px-3 py-2"><button onClick={() => onDelete(e.id)}><Trash2 size={15} style={{ color: "#C0392B" }} /></button></td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={8} className="px-3 py-8 text-center" style={{ color: MUTED }}>Aún no hay registros. Agrega el primero arriba.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
+  if (!stats) return null;
+  const chartData = stats.fasesStats.map((f) => ({ name: f.key.replace("FASE ", "F"), horas: f.horas }));
+  const hayPendientes = stats.pendientes.length > 0;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Dashboard — {selected.nombre}</h2>
+        {selected.estado !== "Completado" && (
+          <div className="text-right">
+            <button onClick={onFinalizar} disabled={hayPendientes}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-white text-sm font-semibold"
+              style={{ background: hayPendientes ? "#B7C3D6" : GREEN, cursor: hayPendientes ? "not-allowed" : "pointer" }}>
+              <CheckCircle2 size={16} /> Marcar proyecto como completado
+            </button>
+            {hayPendientes && <div className="text-xs mt-1" style={{ color: AMBER }}>Resuelve las {stats.pendientes.length} sub-actividades pendientes abajo para poder finalizar</div>}
+          </div>
+        )}
+      </div>
+
+      {hayPendientes && (
+        <Card className="p-4" style={{ borderColor: AMBER }}>
+          <div className="text-sm font-bold mb-1 flex items-center gap-2" style={{ color: NAVY }}>
+            <AlertTriangle size={15} color={AMBER} /> Cierre de sub-actividades pendientes
+          </div>
+          <div className="text-xs mb-3" style={{ color: MUTED }}>
+            Estas sub-actividades no quedaron en "Completado". Si tu proyecto no necesitó alguna de ellas, márcala como "No aplica" para que no afecte el % de avance real.
+          </div>
+          <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
+            {stats.pendientes.map((p) => (
+              <div key={`${p.fase}|||${p.sub}`} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg" style={{ background: BG }}>
+                <div className="text-sm">
+                  <span className="font-semibold" style={{ color: SLATE }}>{p.faseNombre}</span>
+                  <span style={{ color: MUTED }}> — {p.sub}</span>
+                  <span className="ml-2"><Pill color={ESTADO_COLOR[p.estadoActual] || MUTED}>{p.estadoActual}</Pill></span>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => onResolverSub(p.fase, p.sub, "Completado")}
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold text-white" style={{ background: GREEN }}>✓ Completada</button>
+                  <button onClick={() => onResolverSub(p.fase, p.sub, "No aplica")}
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold border" style={{ borderColor: MUTED, color: MUTED }}>No aplica</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className="flex gap-3 flex-wrap">
+        <KpiCard icon={<Gauge size={15} />} label="Avance" value={`${round1(stats.porcentaje * 100)}%`} sub={`${stats.completadas}/${stats.aplicables} aplicables${stats.noAplica ? ` · ${stats.noAplica} no aplica` : ""}`} accent={STEEL} />
+        <KpiCard icon={<Clock size={15} />} label="Días de obra reales" value={stats.diasObraReales || "—"} sub="días con registro" accent={NAVY} />
+        <KpiCard icon={<Ruler size={15} />} label="Área total" value={`${round1(stats.area)} m²`} accent={NAVY} />
+        <KpiCard icon={<PorticoIcon size={15} color={NAVY} />} label="Pórticos" value={stats.porticosTotal || "—"} accent={NAVY} />
+        <KpiCard icon={<Users size={15} />} label="Personal promedio" value={stats.personalProm ? round1(stats.personalProm) : "—"} accent={AMBER} />
+        <KpiCard icon={<MapPin size={15} />} label="Rendimiento" value={stats.m2dia ? `${round1(stats.m2dia)} m²/d` : "—"} sub={stats.porticosDia ? `${round2(stats.porticosDia)} pórticos/d` : ""} accent={GREEN} />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="text-sm font-bold mb-2" style={{ color: NAVY }}>Horas trabajadas por fase</div>
+          <SimpleBarChart data={chartData} dataKey="horas" height={240} color={STEEL} />
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-sm font-bold mb-2" style={{ color: NAVY }}>Avance acumulado (% sub-actividades completadas)</div>
+          {stats.tendencia.length > 1 ? (
+            <SimpleLineChart data={stats.tendencia} dataKey="avance" height={240} color={GREEN} />
+          ) : (
+            <div className="h-[240px] flex items-center justify-center text-sm" style={{ color: MUTED }}>Agrega más registros para ver la tendencia</div>
+          )}
+        </Card>
+      </div>
+
+      <Card className="p-4">
+        <div className="text-sm font-bold mb-3" style={{ color: NAVY }}>Avance por fase</div>
+        <div className="flex flex-col gap-3">
+          {stats.fasesStats.map((f) => (
+            <div key={f.key}>
+              <div className="flex justify-between text-xs mb-1" style={{ color: SLATE }}>
+                <span className="font-semibold flex items-center gap-1.5"><PorticoIcon size={12} color={MUTED} />{f.key.replace("FASE ", "Fase ")} — {f.nombre}</span>
+                <span style={{ color: MUTED }}>
+                  {f.completadas}/{f.aplicablesFase}{f.noAplicaFase ? ` (${f.noAplicaFase} no aplica)` : ""} · {f.dias} días obra
+                </span>
+              </div>
+              <div className="w-full rounded-full h-2" style={{ background: BG }}>
+                <div className="h-2 rounded-full" style={{ width: `${f.pct * 100}%`, background: f.pct === 1 ? GREEN : STEEL }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function HistoricoTab({ projects }) {
+  const completados = projects.filter((p) => p.estado === "Completado" && p.resultados);
+  return (
+    <div className="flex flex-col gap-4">
+      <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Histórico de proyectos completados</h2>
+      {completados.length === 0 ? (
+        <Card className="p-10 text-center">
+          <Archive size={28} style={{ color: MUTED, margin: "0 auto" }} />
+          <div className="mt-2 text-sm" style={{ color: MUTED }}>Aún no hay proyectos marcados como completados.<br />Usa el botón "Marcar proyecto como completado" en el Dashboard cuando termines uno.</div>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead style={{ background: BG }}>
+                <tr>
+                  {["Proyecto", "Cliente", "Ubicación", "Área (m²)", "Pórticos", "Días obra", "m²/día", "Pórticos/día", "Personal prom."].map((h) => (
+                    <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {completados.map((p) => (
+                  <tr key={p.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                    <td className="px-3 py-2 font-semibold whitespace-nowrap">{p.nombre}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{p.ubicacion}</td>
+                    <td className="px-3 py-2">{round1(projectTotals(p).area)}</td>
+                    <td className="px-3 py-2">{projectTotals(p).porticos}</td>
+                    <td className="px-3 py-2">{p.resultados.diasObraReales}</td>
+                    <td className="px-3 py-2">{p.resultados.m2dia ? round1(p.resultados.m2dia) : "—"}</td>
+                    <td className="px-3 py-2">{p.resultados.porticosDia ? round2(p.resultados.porticosDia) : "—"}</td>
+                    <td className="px-3 py-2">{p.resultados.personalProm ? round1(p.resultados.personalProm) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {completados.length > 0 && (
+        <Card className="p-4">
+          <div className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: NAVY }}><AlertTriangle size={15} color={AMBER} />Tiempos estándar por fase (promedio histórico)</div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {FASES.map((f) => {
+              const vals = completados.map((p) => p.resultados.fases.find((x) => x.key === f.key)?.dias).filter((v) => v != null);
+              const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+              return (
+                <div key={f.key} className="p-3 rounded-lg" style={{ background: BG }}>
+                  <div className="text-xs font-semibold" style={{ color: SLATE }}>{f.key.replace("FASE ", "Fase ")}</div>
+                  <div className="text-xs mb-1" style={{ color: MUTED }}>{f.nombre}</div>
+                  <div className="text-lg font-bold" style={{ color: NAVY, fontFamily: "'Space Grotesk', sans-serif" }}>{avg != null ? `${round2(avg)} días` : "—"}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
