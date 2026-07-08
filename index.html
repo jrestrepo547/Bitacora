@@ -275,7 +275,7 @@ const parseHora = (h) => { if (!h) return null; const [hh, mm] = h.split(":").ma
 const fmtFecha = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const round1 = (n) => Math.round(n * 10) / 10;
 const round2 = (n) => Math.round(n * 100) / 100;
-const blankEtapa = () => ({ id: uid(), ancho: "", largo: "", porticos: "", responsable: "" });
+const blankEtapa = () => ({ id: uid(), ancho: "", largo: "", porticos: "", responsable: "", fechaInicio: "", fechaFin: "", estado: "En curso" });
 function projectTotals(p) {
   if (p?.etapas && p.etapas.length) {
     const area = p.etapas.reduce((a, e) => a + (parseFloat(e.ancho) || 0) * (parseFloat(e.largo) || 0), 0);
@@ -478,7 +478,7 @@ function App() {
   const [draft, setDraft] = React.useState(emptyProject());
   const [showNewForm, setShowNewForm] = React.useState(false);
   const blankFila = () => ({
-    id: uid(), fase: FASES[0].key, subs: [],
+    id: uid(), fase: FASES[0].key, subs: [], etapaId: "",
     horaInicio: "07:00", horaFin: "12:00", personal: "", responsable: "", estado: "En curso", obs: "",
   });
   const [fechaRegistro, setFechaRegistro] = React.useState(new Date().toISOString().slice(0, 10));
@@ -770,7 +770,7 @@ function App() {
           <SeguimientoTab
             fechaRegistro={fechaRegistro} setFechaRegistro={setFechaRegistro}
             filas={filas} updateFila={updateFila} addFila={addFila} removeFila={removeFila}
-            onGuardar={handleGuardarDia}
+            onGuardar={handleGuardarDia} etapas={selected ? (selected.etapas || []) : []}
             entries={entries} onDelete={handleDeleteEntry}
             filtroFase={filtroFase} setFiltroFase={setFiltroFase}
           />
@@ -922,10 +922,23 @@ function EtapaRow({ etapa, index, onChange, onRemove, canRemove }) {
           </select>
         </Field>
       </div>
-      <div className="flex justify-between items-center mt-2">
-        <div className="text-xs" style={{ color: MUTED }}>
-          Área: {round1((parseFloat(etapa.ancho) || 0) * (parseFloat(etapa.largo) || 0))} m²
+      <div className="grid md:grid-cols-4 gap-3 mt-2 items-end">
+        <Field label="Fecha inicio"><input type="date" className={inputCls} style={inputStyle} value={etapa.fechaInicio || ""} onChange={(e) => onChange({ fechaInicio: e.target.value })} /></Field>
+        <Field label="Fecha fin"><input type="date" className={inputCls} style={inputStyle} value={etapa.fechaFin || ""} onChange={(e) => onChange({ fechaFin: e.target.value })} /></Field>
+        <Field label="Estado de la etapa">
+          <select className={inputCls} style={inputStyle} value={etapa.estado || "En curso"} onChange={(e) => onChange({ estado: e.target.value })}>
+            {["En curso","Completado","Pendiente","Reprogramado"].map(s => <option key={s}>{s}</option>)}
+          </select>
+        </Field>
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-medium" style={{ color: SLATE }}>Área / Duración</div>
+          <div className="text-xs py-2 px-3 rounded-lg" style={{ background: GREEN + "22", color: GREEN, fontWeight: 600 }}>
+            {round1((parseFloat(etapa.ancho)||0)*(parseFloat(etapa.largo)||0))} m²
+            {etapa.fechaInicio && etapa.fechaFin ? ` · ${Math.max(0, Math.round((new Date(etapa.fechaFin)-new Date(etapa.fechaInicio))/(86400000)))} días` : ""}
+          </div>
         </div>
+      </div>
+      <div className="flex justify-end mt-2">
         {canRemove && (
           <button onClick={onRemove} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border" style={{ borderColor: "#C0392B", color: "#C0392B" }}>
             <Trash2 size={13} /> Quitar etapa
@@ -934,7 +947,6 @@ function EtapaRow({ etapa, index, onChange, onRemove, canRemove }) {
       </div>
     </div>
   );
-}
 
 function DatosTab({ draft, setDraft, onSave, stats }) {
   const tieneEtapas = draft.etapas && draft.etapas.length > 0;
@@ -1038,7 +1050,7 @@ function DatosTab({ draft, setDraft, onSave, stats }) {
   );
 }
 
-function FilaActividad({ fila, onChange, onRemove, canRemove }) {
+function FilaActividad({ fila, onChange, onRemove, canRemove, etapas }) {
   const faseObj = FASES.find((f) => f.key === fila.fase) || FASES[0];
   const [open, setOpen] = React.useState(false);
   const toggleSub = (s) => {
@@ -1048,6 +1060,14 @@ function FilaActividad({ fila, onChange, onRemove, canRemove }) {
   return (
     <div className="rounded-lg p-3 mb-2" style={{ background: BG }}>
       <div className="grid md:grid-cols-4 gap-3">
+        {etapas.length > 0 && (
+          <Field label="Etapa">
+            <select className={inputCls} style={inputStyle} value={fila.etapaId || ""} onChange={(e) => onChange({ etapaId: e.target.value })}>
+              <option value="">— Todas / General —</option>
+              {etapas.map((et, i) => <option key={et.id} value={et.id}>Etapa {i+1}{et.responsable ? ` — ${et.responsable}` : ""}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Fase">
           <select className={inputCls} style={inputStyle} value={fila.fase}
             onChange={(e) => { onChange({ fase: e.target.value, subs: [] }); setOpen(false); }}>
@@ -1115,7 +1135,7 @@ function FilaActividad({ fila, onChange, onRemove, canRemove }) {
   );
 }
 
-function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, addFila, removeFila, onGuardar, entries, onDelete, filtroFase, setFiltroFase }) {
+function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, addFila, removeFila, onGuardar, entries, onDelete, filtroFase, setFiltroFase, etapas }) {
   const filtered = (filtroFase === "TODAS" ? entries : entries.filter((e) => e.fase === filtroFase))
     .slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   const fasesEnUso = new Set(filas.map((f) => f.fase)).size;
@@ -1145,6 +1165,7 @@ function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, ad
             onChange={(patch) => updateFila(fila.id, patch)}
             onRemove={() => removeFila(fila.id)}
             canRemove={filas.length > 1}
+            etapas={etapas}
           />
         ))}
 
@@ -1256,6 +1277,59 @@ function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
         <KpiCard icon={<Users size={15} />} label="Personal promedio" value={stats.personalProm ? round1(stats.personalProm) : "—"} accent={AMBER} />
         <KpiCard icon={<MapPin size={15} />} label="Rendimiento" value={stats.m2dia ? `${round1(stats.m2dia)} m²/d` : "—"} sub={stats.porticosDia ? `${round2(stats.porticosDia)} pórticos/d` : ""} accent={GREEN} />
       </div>
+
+      {selected.etapas && selected.etapas.length > 0 && (
+        <Card className="p-4">
+          <div className="text-sm font-bold mb-3" style={{ color: NAVY }}>Estado por etapa</div>
+          <div className="grid md:grid-cols-2 gap-3">
+            {selected.etapas.map((et, i) => {
+              const etapaEntries = entries.filter(e => e.etapaId === et.id);
+              const latestBySubEt = {};
+              etapaEntries.forEach(e => {
+                const k = `${e.fase}|||${e.sub}`;
+                if (!latestBySubEt[k] || e.fecha >= latestBySubEt[k].fecha) latestBySubEt[k] = e;
+              });
+              const registradas = Object.keys(latestBySubEt).length;
+              const completadas = Object.values(latestBySubEt).filter(e => e.estado === "Completado").length;
+              const pct = registradas ? completadas / registradas : 0;
+              const diasDuracion = et.fechaInicio && et.fechaFin
+                ? Math.max(0, Math.round((new Date(et.fechaFin) - new Date(et.fechaInicio)) / 86400000))
+                : null;
+              return (
+                <div key={et.id} className="rounded-lg p-3" style={{ background: BG, border: `1px solid ${LINE}` }}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-bold text-sm" style={{ color: NAVY }}>Etapa {i+1}</div>
+                      {et.responsable && <div className="text-xs" style={{ color: MUTED }}>{et.responsable}</div>}
+                    </div>
+                    <Pill color={et.estado === "Completado" ? GREEN : et.estado === "En curso" ? STEEL : MUTED}>{et.estado || "En curso"}</Pill>
+                  </div>
+                  <div className="flex gap-3 text-xs mb-2" style={{ color: MUTED }}>
+                    <span>{round1((parseFloat(et.ancho)||0)*(parseFloat(et.largo)||0))} m²</span>
+                    <span>{et.porticos || "—"} pórticos</span>
+                    {et.fechaInicio && <span>Inicio: {new Date(et.fechaInicio+"T12:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"short"})}</span>}
+                    {et.fechaFin && <span>Fin: {new Date(et.fechaFin+"T12:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"short"})}</span>}
+                    {diasDuracion !== null && <span>{diasDuracion} días</span>}
+                  </div>
+                  <div className="w-full rounded-full h-2 mb-1" style={{ background: "#E0E0E0" }}>
+                    <div className="h-2 rounded-full" style={{ width: `${pct*100}%`, background: pct >= 1 ? GREEN : STEEL }} />
+                  </div>
+                  <div className="text-xs" style={{ color: MUTED }}>{registradas ? `${completadas}/${registradas} actividades completadas` : "Sin actividades registradas en esta etapa"}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${LINE}` }}>
+            <span className="text-sm font-bold" style={{ color: NAVY }}>Proyecto completo</span>
+            <div className="flex items-center gap-3">
+              <div className="w-40 rounded-full h-2" style={{ background: "#E0E0E0" }}>
+                <div className="h-2 rounded-full" style={{ width: `${stats.porcentaje*100}%`, background: stats.porcentaje >= 1 ? GREEN : STEEL }} />
+              </div>
+              <span className="text-sm font-bold" style={{ color: stats.porcentaje >= 1 ? GREEN : STEEL }}>{round1(stats.porcentaje*100)}%</span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="p-4">
