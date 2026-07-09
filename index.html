@@ -580,7 +580,20 @@ function App() {
       return { fecha: fecha.slice(5), avance: round1((completadasHasta / Math.max(aplicables, 1)) * 100) };
     });
 
-    return { area, porticosTotal, jornadaProm, fasesStats, completadas, noAplica, aplicables, porcentaje, diasObraReales, personalProm, m2dia, porticosDia, tendencia, pendientes };
+    // Avance por etapa — calculado aquí donde entries está en scope
+    const etapasStats = (selected.etapas || []).map((et, i) => {
+      const etapaEnts = entries.filter(e => e.etapaId === et.id);
+      const latestEt = {};
+      etapaEnts.forEach(e => {
+        const k = `${e.fase}|||${e.sub}`;
+        if (!latestEt[k] || e.fecha >= latestEt[k].fecha) latestEt[k] = e;
+      });
+      const regCount = Object.keys(latestEt).length;
+      const compCount = Object.values(latestEt).filter(e => e.estado === "Completado").length;
+      return { ...et, index: i, registradas: regCount, completadas: compCount, pct: regCount ? compCount / regCount : 0 };
+    });
+
+    return { area, porticosTotal, jornadaProm, fasesStats, completadas, noAplica, aplicables, porcentaje, diasObraReales, personalProm, m2dia, porticosDia, tendencia, pendientes, etapasStats };
   }, [auth, selected, entries]);
 
   if (!auth) {
@@ -775,7 +788,7 @@ function App() {
             filtroFase={filtroFase} setFiltroFase={setFiltroFase}
           />
         ) : tab === "dashboard" ? (
-          <DashboardTab selected={selected} stats={stats} onFinalizar={handleFinalizar} onResolverSub={handleResolverSub} />
+          <DashboardTab selected={selected} stats={stats} entries={entries} onFinalizar={handleFinalizar} onResolverSub={handleResolverSub} />
         ) : (
           <HistoricoTab projects={projects} />
         )}
@@ -1222,7 +1235,7 @@ function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, ad
   );
 }
 
-function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
+function DashboardTab({ selected, stats, entries, onFinalizar, onResolverSub }) {
   if (!stats) return null;
   const chartData = stats.fasesStats.map((f) => ({ name: f.key.replace("FASE ", "F"), horas: f.horas }));
   const hayPendientes = stats.pendientes.length > 0;
@@ -1283,16 +1296,7 @@ function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
         <Card className="p-4">
           <div className="text-sm font-bold mb-3" style={{ color: NAVY }}>Estado por etapa</div>
           <div className="grid md:grid-cols-2 gap-3">
-            {selected.etapas.map((et, i) => {
-              const etapaEntries = entries.filter(e => e.etapaId === et.id);
-              const latestBySubEt = {};
-              etapaEntries.forEach(e => {
-                const k = `${e.fase}|||${e.sub}`;
-                if (!latestBySubEt[k] || e.fecha >= latestBySubEt[k].fecha) latestBySubEt[k] = e;
-              });
-              const registradas = Object.keys(latestBySubEt).length;
-              const completadas = Object.values(latestBySubEt).filter(e => e.estado === "Completado").length;
-              const pct = registradas ? completadas / registradas : 0;
+            {stats.etapasStats.map((et) => {
               const diasDuracion = et.fechaInicio && et.fechaFin
                 ? Math.max(0, Math.round((new Date(et.fechaFin) - new Date(et.fechaInicio)) / 86400000))
                 : null;
@@ -1300,12 +1304,12 @@ function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
                 <div key={et.id} className="rounded-lg p-3" style={{ background: BG, border: `1px solid ${LINE}` }}>
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <div className="font-bold text-sm" style={{ color: NAVY }}>Etapa {i+1}</div>
+                      <div className="font-bold text-sm" style={{ color: NAVY }}>Etapa {et.index+1}</div>
                       {et.responsable && <div className="text-xs" style={{ color: MUTED }}>{et.responsable}</div>}
                     </div>
                     <Pill color={et.estado === "Completado" ? GREEN : et.estado === "En curso" ? STEEL : MUTED}>{et.estado || "En curso"}</Pill>
                   </div>
-                  <div className="flex gap-3 text-xs mb-2" style={{ color: MUTED }}>
+                  <div className="flex gap-3 text-xs mb-2 flex-wrap" style={{ color: MUTED }}>
                     <span>{round1((parseFloat(et.ancho)||0)*(parseFloat(et.largo)||0))} m²</span>
                     <span>{et.porticos || "—"} pórticos</span>
                     {et.fechaInicio && <span>Inicio: {new Date(et.fechaInicio+"T12:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"short"})}</span>}
@@ -1313,9 +1317,11 @@ function DashboardTab({ selected, stats, onFinalizar, onResolverSub }) {
                     {diasDuracion !== null && <span>{diasDuracion} días</span>}
                   </div>
                   <div className="w-full rounded-full h-2 mb-1" style={{ background: "#E0E0E0" }}>
-                    <div className="h-2 rounded-full" style={{ width: `${pct*100}%`, background: pct >= 1 ? GREEN : STEEL }} />
+                    <div className="h-2 rounded-full" style={{ width: `${et.pct*100}%`, background: et.pct >= 1 ? GREEN : STEEL }} />
                   </div>
-                  <div className="text-xs" style={{ color: MUTED }}>{registradas ? `${completadas}/${registradas} actividades completadas` : "Sin actividades registradas en esta etapa"}</div>
+                  <div className="text-xs" style={{ color: MUTED }}>
+                    {et.registradas ? `${et.completadas}/${et.registradas} actividades completadas` : "Sin actividades registradas en esta etapa"}
+                  </div>
                 </div>
               );
             })}
