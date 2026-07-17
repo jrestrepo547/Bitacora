@@ -84,7 +84,12 @@ async function loadEntries(projectId) {
 async function saveEntries(projectId, entries) {
   try {
     await Promise.all(entries.map(e => firebase.firestore().collection("entries_" + projectId).doc(e.id).set(e)));
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error("saveEntries error:", e); }
+}
+async function saveNewEntries(projectId, newEntries) {
+  try {
+    await Promise.all(newEntries.map(e => firebase.firestore().collection("entries_" + projectId).doc(e.id).set(e)));
+  } catch(e) { console.error("saveNewEntries error:", e); }
 }
 async function deleteEntry(projectId, entryId) {
   try { await firebase.firestore().collection("entries_" + projectId).doc(entryId).delete(); }
@@ -177,6 +182,18 @@ const TOTAL_SUBACTIVIDADES = FASES.reduce((a, f) => a + f.subs.length, 0);
 const ESTADOS = ["Pendiente", "En curso", "Completado", "Reprogramado", "No aplica"];
 const ESTADO_COLOR = { Pendiente: MUTED, "En curso": STEEL, Completado: GREEN, Reprogramado: AMBER, "No aplica": "#94A3B8" };
 const RESPONSABLES = ["Yonny Carvajal", "Estid Mojica", "Eduardo Hernández", "Cristian Herrera", "Deybis Gonzalez", "Darwinson Payanene"];
+
+const MOTIVOS_TIEMPO_MUERTO = [
+  "Lluvia / condiciones climáticas",
+  "Área de trabajo no despejada por el cliente",
+  "Permisos de trabajo no firmados",
+  "Falta de materiales en sitio",
+  "Falla de grúa / equipo",
+  "Espera de decisión del cliente",
+  "Acceso restringido al sitio",
+  "Falta de personal",
+  "Otro (especificar en observaciones)",
+];
 
 // ---------- Inline SVG Icons (sin dependencias externas) ----------
 function SvgIcon({ path, size, color, style, ...rest }) {
@@ -484,6 +501,9 @@ function App() {
   const [fechaRegistro, setFechaRegistro] = React.useState(new Date().toISOString().slice(0, 10));
   const [filas, setFilas] = React.useState([blankFila()]);
   const [filtroFase, setFiltroFase] = React.useState("TODAS");
+  const blankTM = () => ({ motivo: MOTIVOS_TIEMPO_MUERTO[0], horaInicio: "07:00", horaFin: "09:00", obs: "", etapaId: "" });
+  const [tiempoMuerto, setTiempoMuerto] = React.useState(blankTM());
+  const [showTM, setShowTM] = React.useState(false);
 
   const handleLogin = () => {
     if (passInput === PASS_ACCESO) { setAuth(true); }
@@ -593,7 +613,15 @@ function App() {
       return { ...et, index: i, registradas: regCount, completadas: compCount, pct: regCount ? compCount / regCount : 0 };
     });
 
-    return { area, porticosTotal, jornadaProm, fasesStats, completadas, noAplica, aplicables, porcentaje, diasObraReales, personalProm, m2dia, porticosDia, tendencia, pendientes, etapasStats };
+    // Análisis de tiempos muertos
+    const tmEntries = entries.filter(e => e.tipo === "tiempo_muerto");
+    const totalHorasTM = round2(tmEntries.reduce((a, e) => a + (parseFloat(e.duracionH) || 0), 0));
+    const tmPorMotivo = {};
+    tmEntries.forEach(e => {
+      tmPorMotivo[e.motivo] = (tmPorMotivo[e.motivo] || 0) + (parseFloat(e.duracionH) || 0);
+    });
+
+    return { area, porticosTotal, jornadaProm, fasesStats, completadas, noAplica, aplicables, porcentaje, diasObraReales, personalProm, m2dia, porticosDia, tendencia, pendientes, etapasStats, totalHorasTM, tmPorMotivo, tmEntries };
   }, [auth, selected, entries]);
 
   if (!auth) {
@@ -668,9 +696,12 @@ function App() {
   const removeFila = (id) => setFilas((prev) => (prev.length > 1 ? prev.filter((f) => f.id !== id) : prev));
 
   const handleGuardarDia = async () => {
-    if (!fechaRegistro) return;
+    if (!fechaRegistro) { alert("Debes seleccionar una fecha."); return; }
     const validas = filas.filter((f) => f.subs && f.subs.length);
-    if (!validas.length) return;
+    if (!validas.length) {
+      alert("Debes seleccionar al menos una sub-actividad en cada fila antes de guardar.");
+      return;
+    }
     const nuevas = validas.flatMap((f) =>
       f.subs.map((s) => {
         const { subs, ...rest } = f;
@@ -678,13 +709,34 @@ function App() {
       })
     );
     const updated = [...entries, ...nuevas];
-    setEntries(updated); await saveEntries(selected.id, updated);
+    setEntries(updated);
+    await saveNewEntries(selected.id, nuevas); // solo guarda los nuevos, no reescribe todos
     setFilas([blankFila()]);
+  };
+
+  const handleGuardarTM = async () => {
+    if (!fechaRegistro) { alert("Debes seleccionar una fecha."); return; }
+    const hi = tiempoMuerto.horaInicio.split(":").map(Number);
+    const hf = tiempoMuerto.horaFin.split(":").map(Number);
+    const durH = round2(Math.max(0, (hf[0] + hf[1]/60) - (hi[0] + hi[1]/60)));
+    const tm = {
+      id: uid(), projectId: selected.id, tipo: "tiempo_muerto",
+      fecha: fechaRegistro, motivo: tiempoMuerto.motivo,
+      horaInicio: tiempoMuerto.horaInicio, horaFin: tiempoMuerto.horaFin,
+      duracionH: durH, obs: tiempoMuerto.obs,
+      etapaId: tiempoMuerto.etapaId || "",
+    };
+    const updated = [...entries, tm];
+    setEntries(updated);
+    await saveNewEntries(selected.id, [tm]);
+    setTiempoMuerto(blankTM());
+    setShowTM(false);
   };
 
   const handleDeleteEntry = async (id) => {
     const updated = entries.filter((e) => e.id !== id);
-    setEntries(updated); await saveEntries(selected.id, updated);
+    setEntries(updated);
+    await deleteEntry(selected.id, id); // solo borra ese documento en Firebase
   };
 
   const handleDeleteProject = async (projectId) => {
@@ -705,7 +757,8 @@ function App() {
       estado: nuevoEstado, obs: "Cierre de proyecto",
     };
     const updated = [...entries, e];
-    setEntries(updated); await saveEntries(selected.id, updated);
+    setEntries(updated);
+    await saveNewEntries(selected.id, [e]); // solo guarda el nuevo
   };
 
   const handleFinalizar = async () => {
@@ -784,6 +837,8 @@ function App() {
             fechaRegistro={fechaRegistro} setFechaRegistro={setFechaRegistro}
             filas={filas} updateFila={updateFila} addFila={addFila} removeFila={removeFila}
             onGuardar={handleGuardarDia} etapas={selected ? (selected.etapas || []) : []}
+            tiempoMuerto={tiempoMuerto} setTiempoMuerto={setTiempoMuerto}
+            showTM={showTM} setShowTM={setShowTM} onGuardarTM={handleGuardarTM}
             entries={entries} onDelete={handleDeleteEntry}
             filtroFase={filtroFase} setFiltroFase={setFiltroFase}
           />
@@ -1149,8 +1204,10 @@ function FilaActividad({ fila, onChange, onRemove, canRemove, etapas }) {
   );
 }
 
-function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, addFila, removeFila, onGuardar, entries, onDelete, filtroFase, setFiltroFase, etapas }) {
-  const filtered = (filtroFase === "TODAS" ? entries : entries.filter((e) => e.fase === filtroFase))
+function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, addFila, removeFila, onGuardar, entries, onDelete, filtroFase, setFiltroFase, etapas, tiempoMuerto, setTiempoMuerto, showTM, setShowTM, onGuardarTM }) {
+  const actEntries = entries.filter(e => e.tipo !== "tiempo_muerto");
+  const tmEntries = entries.filter(e => e.tipo === "tiempo_muerto");
+  const filtered = (filtroFase === "TODAS" ? actEntries : actEntries.filter((e) => e.fase === filtroFase))
     .slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   const fasesEnUso = new Set(filas.map((f) => f.fase)).size;
 
@@ -1231,6 +1288,97 @@ function SeguimientoTab({ fechaRegistro, setFechaRegistro, filas, updateFila, ad
           </table>
         </div>
       </Card>
+
+      {/* ---- BLOQUE TIEMPOS MUERTOS ---- */}
+      <div className="flex items-center justify-between mt-2">
+        <div className="text-sm font-bold flex items-center gap-2" style={{ color: NAVY }}>
+          <AlertTriangle size={16} color={AMBER} /> Tiempos muertos / Improductivos
+        </div>
+        <button onClick={() => setShowTM(v => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border"
+          style={{ borderColor: AMBER, color: AMBER }}>
+          <Plus size={14} /> {showTM ? "Cancelar" : "Registrar tiempo muerto"}
+        </button>
+      </div>
+
+      {showTM && (
+        <Card className="p-4" style={{ borderColor: AMBER }}>
+          <div className="text-xs mb-3" style={{ color: MUTED }}>
+            Registra aquí cualquier tiempo en que la cuadrilla estuvo parada por causas externas. Esto queda como sustento documental ante el cliente.
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <Field label="Motivo del tiempo muerto">
+                <select className={inputCls} style={inputStyle} value={tiempoMuerto.motivo}
+                  onChange={e => setTiempoMuerto({...tiempoMuerto, motivo: e.target.value})}>
+                  {MOTIVOS_TIEMPO_MUERTO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Field>
+            </div>
+            {etapas.length > 0 && (
+              <Field label="Etapa afectada">
+                <select className={inputCls} style={inputStyle} value={tiempoMuerto.etapaId || ""}
+                  onChange={e => setTiempoMuerto({...tiempoMuerto, etapaId: e.target.value})}>
+                  <option value="">— General —</option>
+                  {etapas.map((et, i) => <option key={et.id} value={et.id}>Etapa {i+1}{et.responsable ? ` — ${et.responsable}` : ""}</option>)}
+                </select>
+              </Field>
+            )}
+            <Field label="Hora inicio"><input type="time" className={inputCls} style={inputStyle} value={tiempoMuerto.horaInicio} onChange={e => setTiempoMuerto({...tiempoMuerto, horaInicio: e.target.value})} /></Field>
+            <Field label="Hora fin"><input type="time" className={inputCls} style={inputStyle} value={tiempoMuerto.horaFin} onChange={e => setTiempoMuerto({...tiempoMuerto, horaFin: e.target.value})} /></Field>
+            <Field label="Duración (calculada)">
+              <input disabled className={inputCls} style={{...inputStyle, background: BG}}
+                value={(() => { const hi = tiempoMuerto.horaInicio.split(":").map(Number); const hf = tiempoMuerto.horaFin.split(":").map(Number); const d = Math.max(0,(hf[0]+hf[1]/60)-(hi[0]+hi[1]/60)); return d.toFixed(2) + " h"; })()}
+              />
+            </Field>
+            <div className="md:col-span-3">
+              <Field label="Descripción / observaciones">
+                <input className={inputCls} style={inputStyle} value={tiempoMuerto.obs}
+                  onChange={e => setTiempoMuerto({...tiempoMuerto, obs: e.target.value})}
+                  placeholder="Detalla la situación para sustentar la demora ante el cliente..." />
+              </Field>
+            </div>
+          </div>
+          <div className="flex justify-end mt-3">
+            <button onClick={onGuardarTM}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold"
+              style={{ background: AMBER }}>
+              <Save size={16} /> Guardar tiempo muerto
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {tmEntries.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="px-4 pt-3 pb-1 text-xs font-bold" style={{ color: AMBER }}>
+            TIEMPOS MUERTOS REGISTRADOS — {round2(tmEntries.reduce((a,e)=>a+(parseFloat(e.duracionH)||0),0))} h total improductivas
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead style={{ background: "#FFF8EE" }}>
+                <tr>
+                  {["Fecha","Motivo","Horario","Duración","Observaciones",""].map(h => (
+                    <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: AMBER, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tmEntries.slice().sort((a,b) => a.fecha < b.fecha ? 1 : -1).map(e => (
+                  <tr key={e.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                    <td className="px-3 py-2 whitespace-nowrap">{new Date(e.fecha+"T12:00:00").toLocaleDateString("es-CO",{day:"2-digit",month:"short",year:"numeric"})}</td>
+                    <td className="px-3 py-2">{e.motivo}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{e.horaInicio}–{e.horaFin}</td>
+                    <td className="px-3 py-2 text-center font-bold" style={{ color: AMBER }}>{parseFloat(e.duracionH).toFixed(2)} h</td>
+                    <td className="px-3 py-2" style={{ color: MUTED }}>{e.obs || "—"}</td>
+                    <td className="px-3 py-2"><button onClick={() => onDelete(e.id)}><Trash2 size={15} style={{ color: "#C0392B" }} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1372,6 +1520,34 @@ function DashboardTab({ selected, stats, entries, onFinalizar, onResolverSub }) 
           ))}
         </div>
       </Card>
+
+      {stats.totalHorasTM > 0 && (
+        <Card className="p-4" style={{ borderColor: AMBER }}>
+          <div className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: NAVY }}>
+            <AlertTriangle size={16} color={AMBER} />
+            Tiempos muertos — {stats.totalHorasTM} h improductivas registradas
+          </div>
+          <div className="flex flex-col gap-2">
+            {Object.entries(stats.tmPorMotivo).sort((a,b)=>b[1]-a[1]).map(([motivo, horas]) => {
+              const pct = stats.totalHorasTM ? horas / stats.totalHorasTM : 0;
+              return (
+                <div key={motivo}>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span style={{ color: SLATE }}>{motivo}</span>
+                    <span className="font-bold" style={{ color: AMBER }}>{round2(horas)} h</span>
+                  </div>
+                  <div className="w-full rounded-full h-1.5" style={{ background: BG }}>
+                    <div className="h-1.5 rounded-full" style={{ width: `${pct*100}%`, background: AMBER }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 text-xs" style={{ color: MUTED }}>
+            Días de obra equivalentes perdidos: <strong>{round2(stats.totalHorasTM / (stats.jornadaProm || 9.67))}</strong> días (basado en jornada promedio de {round2(stats.jornadaProm)} h/día)
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
