@@ -1075,7 +1075,7 @@ function ProyectosTab({ projects, selectedId, setSelectedId, setTab, showNewForm
               }}/>
             </label>
           </div>
-          <button onClick={() => setShowNewForm((v) => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: NAVY }}>
+          <button onClick={() => { if (!showNewForm) setDraft(emptyProject()); setShowNewForm((v) => !v); }} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: NAVY }}>
             <Plus size={16} /> Nuevo proyecto
           </button>
         </div>
