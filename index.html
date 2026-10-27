@@ -1743,62 +1743,212 @@ function DashboardTab({ selected, stats, entries, onFinalizar, onResolverSub }) 
 
 function HistoricoTab({ projects }) {
   const completados = projects.filter((p) => p.estado === "Completado" && p.resultados);
-  return (
-    <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Histórico de proyectos completados</h2>
-      {completados.length === 0 ? (
+
+  const RANGOS = [
+    { key: "todos", label: "Todos", min: 0, max: Infinity },
+    { key: "r1", label: "1 – 500 m²", min: 0, max: 500 },
+    { key: "r2", label: "501 – 1.000 m²", min: 500, max: 1000 },
+    { key: "r3", label: "1.001 – 2.000 m²", min: 1000, max: 2000 },
+    { key: "r4", label: "2.001 – 4.000 m²", min: 2000, max: 4000 },
+    { key: "r5", label: "4.001 – 6.000 m²", min: 4000, max: 6000 },
+  ];
+  const [rango, setRango] = React.useState("todos");
+  const rangoSel = RANGOS.find(r => r.key === rango) || RANGOS[0];
+
+  // Enriquecer cada proyecto con su área calculada
+  const conArea = completados.map(p => ({ ...p, _area: round1(projectTotals(p).area), _porticos: projectTotals(p).porticos }));
+
+  // Filtrar por rango de área
+  const filtrados = conArea.filter(p => {
+    if (rango === "todos") return true;
+    return p._area > rangoSel.min && p._area <= rangoSel.max;
+  });
+
+  // ---- KPIs agregados sobre el conjunto filtrado ----
+  const nProy = filtrados.length;
+  const m2Total = round1(filtrados.reduce((a, p) => a + p._area, 0));
+  const m2Prom = nProy ? round1(m2Total / nProy) : 0;
+  const diasArr = filtrados.map(p => p.resultados.diasObraReales).filter(v => v != null && v > 0);
+  const diasProm = diasArr.length ? round1(diasArr.reduce((a, b) => a + b, 0) / diasArr.length) : null;
+  const rendArr = filtrados.map(p => p.resultados.m2dia).filter(v => v != null && v > 0);
+  const rendProm = rendArr.length ? round1(rendArr.reduce((a, b) => a + b, 0) / rendArr.length) : null;
+  const persArr = filtrados.map(p => p.resultados.personalProm).filter(v => v != null && v > 0);
+  const persProm = persArr.length ? round1(persArr.reduce((a, b) => a + b, 0) / persArr.length) : null;
+  const portTotal = filtrados.reduce((a, p) => a + (p._porticos || 0), 0);
+
+  // ---- Tiempo promedio por fase (dentro del filtro) ----
+  const fasesData = FASES.map(f => {
+    const vals = filtrados.map(p => p.resultados.fases.find(x => x.key === f.key)?.dias).filter(v => v != null && v > 0);
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    return { name: f.key.replace("FASE ", "F"), nombre: f.nombre, dias: round2(avg), n: vals.length };
+  });
+
+  // ---- Tiempo/rendimiento por número de personas (cuadrilla representativa = personalProm redondeado) ----
+  const porPersonas = {};
+  filtrados.forEach(p => {
+    const n = p.resultados.personalProm ? Math.round(p.resultados.personalProm) : null;
+    if (!n) return;
+    if (!porPersonas[n]) porPersonas[n] = { proyectos: 0, dias: [], rend: [] };
+    porPersonas[n].proyectos += 1;
+    if (p.resultados.diasObraReales) porPersonas[n].dias.push(p.resultados.diasObraReales);
+    if (p.resultados.m2dia) porPersonas[n].rend.push(p.resultados.m2dia);
+  });
+  const personasData = Object.keys(porPersonas).sort((a, b) => a - b).map(n => {
+    const d = porPersonas[n];
+    const diasAvg = d.dias.length ? d.dias.reduce((a, b) => a + b, 0) / d.dias.length : 0;
+    const rendAvg = d.rend.length ? d.rend.reduce((a, b) => a + b, 0) / d.rend.length : 0;
+    return { name: n + "p", personas: n, proyectos: d.proyectos, diasProm: round1(diasAvg), rendProm: round1(rendAvg) };
+  });
+
+  // ---- Comparativa de rendimiento entre TODOS los rangos (ignora el filtro, siempre muestra el panorama) ----
+  const compRangos = RANGOS.filter(r => r.key !== "todos").map(r => {
+    const enRango = conArea.filter(p => p._area > r.min && p._area <= r.max);
+    const rends = enRango.map(p => p.resultados.m2dia).filter(v => v != null && v > 0);
+    const avg = rends.length ? rends.reduce((a, b) => a + b, 0) / rends.length : 0;
+    return { name: r.label.replace(" m²", "").replace(".", ""), rend: round1(avg), n: enRango.length };
+  });
+
+  if (completados.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Histórico — Dashboard de obras</h2>
         <Card className="p-10 text-center">
           <Archive size={28} style={{ color: MUTED, margin: "0 auto" }} />
-          <div className="mt-2 text-sm" style={{ color: MUTED }}>Aún no hay proyectos marcados como completados.<br />Usa el botón "Marcar proyecto como completado" en el Dashboard cuando termines uno.</div>
+          <div className="mt-2 text-sm" style={{ color: MUTED }}>Aún no hay proyectos marcados como completados.<br />Usa el botón "Finalizar proyecto" en el Dashboard cuando termines uno.</div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Histórico — Dashboard de obras instaladas</h2>
+      </div>
+
+      {/* Filtro por rango de área */}
+      <Card className="p-4">
+        <div className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: MUTED }}>Filtrar por área de bodega</div>
+        <div className="flex gap-2 flex-wrap">
+          {RANGOS.map(r => {
+            const activo = rango === r.key;
+            const count = r.key === "todos" ? conArea.length : conArea.filter(p => p._area > r.min && p._area <= r.max).length;
+            return (
+              <button key={r.key} onClick={() => setRango(r.key)}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+                style={{
+                  background: activo ? NAVY : BG,
+                  color: activo ? "#FFFFFF" : SLATE,
+                  border: `1px solid ${activo ? NAVY : LINE}`,
+                }}>
+                {r.label} <span style={{ opacity: 0.7, fontSize: 11 }}>({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {filtrados.length === 0 ? (
+        <Card className="p-10 text-center">
+          <Archive size={24} style={{ color: MUTED, margin: "0 auto" }} />
+          <div className="mt-2 text-sm" style={{ color: MUTED }}>No hay proyectos completados en este rango de área.</div>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead style={{ background: BG }}>
-                <tr>
-                  {["Proyecto", "Cliente", "Ubicación", "Área (m²)", "Pórticos", "Días obra", "m²/día", "Pórticos/día", "Personal prom."].map((h) => (
-                    <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {completados.map((p) => (
-                  <tr key={p.id} style={{ borderTop: `1px solid ${LINE}` }}>
-                    <td className="px-3 py-2 font-semibold whitespace-nowrap">{p.nombre}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{p.ubicacion}</td>
-                    <td className="px-3 py-2">{round1(projectTotals(p).area)}</td>
-                    <td className="px-3 py-2">{projectTotals(p).porticos}</td>
-                    <td className="px-3 py-2">{p.resultados.diasObraReales}</td>
-                    <td className="px-3 py-2">{p.resultados.m2dia ? round1(p.resultados.m2dia) : "—"}</td>
-                    <td className="px-3 py-2">{p.resultados.porticosDia ? round2(p.resultados.porticosDia) : "—"}</td>
-                    <td className="px-3 py-2">{p.resultados.personalProm ? round1(p.resultados.personalProm) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {/* KPIs */}
+          <div className="flex gap-3 flex-wrap">
+            <KpiCard icon={<Archive size={15} />} label="Proyectos instalados" value={nProy} accent={NAVY} />
+            <KpiCard icon={<Ruler size={15} />} label="m² totales instalados" value={m2Total.toLocaleString("es-CO")} accent={STEEL} />
+            <KpiCard icon={<Ruler size={15} />} label="m² promedio / proyecto" value={m2Prom.toLocaleString("es-CO")} accent={STEEL} />
+            <KpiCard icon={<Clock size={15} />} label="Duración promedio" value={diasProm != null ? `${diasProm} d` : "—"} sub="días de obra" accent={NAVY} />
+            <KpiCard icon={<Gauge size={15} />} label="Rendimiento promedio" value={rendProm != null ? `${rendProm}` : "—"} sub="m²/día" accent={GREEN} />
+            <KpiCard icon={<Users size={15} />} label="Personal promedio" value={persProm != null ? `${persProm}` : "—"} sub="personas en obra" accent={AMBER} />
+            <KpiCard icon={<PorticoIcon size={15} color={NAVY} />} label="Pórticos instalados" value={portTotal} accent={NAVY} />
           </div>
-        </Card>
-      )}
 
-      {completados.length > 0 && (
-        <Card className="p-4">
-          <div className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: NAVY }}><AlertTriangle size={15} color={AMBER} />Tiempos estándar por fase (promedio histórico)</div>
-          <div className="grid md:grid-cols-3 gap-3">
-            {FASES.map((f) => {
-              const vals = completados.map((p) => p.resultados.fases.find((x) => x.key === f.key)?.dias).filter((v) => v != null);
-              const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-              return (
-                <div key={f.key} className="p-3 rounded-lg" style={{ background: BG }}>
-                  <div className="text-xs font-semibold" style={{ color: SLATE }}>{f.key.replace("FASE ", "Fase ")}</div>
-                  <div className="text-xs mb-1" style={{ color: MUTED }}>{f.nombre}</div>
-                  <div className="text-lg font-bold" style={{ color: NAVY, fontFamily: "'Space Grotesk', sans-serif" }}>{avg != null ? `${round2(avg)} días` : "—"}</div>
-                </div>
-              );
-            })}
+          {/* Tiempo por fase + por personas */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="p-4">
+              <div className="text-sm font-bold mb-1" style={{ color: NAVY }}>Tiempo promedio por fase</div>
+              <div className="text-xs mb-2" style={{ color: MUTED }}>Días de obra promedio por fase — {rangoSel.label}</div>
+              <SimpleBarChart data={fasesData} dataKey="dias" height={220} color={STEEL} />
+              <div className="mt-2 grid grid-cols-2 gap-1">
+                {fasesData.map(f => (
+                  <div key={f.name} className="flex justify-between text-xs px-2 py-1 rounded" style={{ background: BG }}>
+                    <span style={{ color: SLATE }}><strong>{f.name}</strong> {f.nombre}</span>
+                    <span style={{ color: NAVY, fontWeight: 700 }}>{f.dias}d</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-sm font-bold mb-1" style={{ color: NAVY }}>Rendimiento por tamaño de cuadrilla</div>
+              <div className="text-xs mb-2" style={{ color: MUTED }}>m²/día promedio según número de personas</div>
+              {personasData.length > 0 ? (
+                <>
+                  <SimpleBarChart data={personasData} dataKey="rendProm" height={220} color={GREEN} />
+                  <div className="mt-2 flex flex-col gap-1">
+                    {personasData.map(d => (
+                      <div key={d.name} className="flex justify-between items-center text-xs px-2 py-1.5 rounded" style={{ background: BG }}>
+                        <span style={{ color: SLATE }}><Users size={12} color={AMBER} /> <strong>{d.personas} personas</strong> · {d.proyectos} obra{d.proyectos > 1 ? "s" : ""}</span>
+                        <span style={{ color: SLATE }}>{d.rendProm} m²/d · {d.diasProm} días prom.</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-sm" style={{ color: MUTED }}>Sin datos de personal en este rango</div>
+              )}
+            </Card>
           </div>
-        </Card>
+
+          {/* Comparativa de rendimiento entre rangos */}
+          <Card className="p-4">
+            <div className="text-sm font-bold mb-1" style={{ color: NAVY }}>Rendimiento comparado entre rangos de área</div>
+            <div className="text-xs mb-2" style={{ color: MUTED }}>m²/día promedio por cada rango de bodega (todo el histórico)</div>
+            <SimpleBarChart data={compRangos} dataKey="rend" height={200} color={AMBER} />
+            <div className="mt-2 grid md:grid-cols-5 grid-cols-2 gap-1">
+              {compRangos.map(c => (
+                <div key={c.name} className="text-xs px-2 py-1.5 rounded text-center" style={{ background: BG }}>
+                  <div style={{ color: MUTED }}>{c.name}</div>
+                  <div style={{ color: NAVY, fontWeight: 700 }}>{c.rend} m²/d</div>
+                  <div style={{ color: MUTED, fontSize: 10 }}>{c.n} obra{c.n !== 1 ? "s" : ""}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Tabla detallada */}
+          <Card className="overflow-hidden">
+            <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wide" style={{ color: MUTED }}>Detalle de proyectos — {rangoSel.label} ({nProy})</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead style={{ background: BG }}>
+                  <tr>
+                    {["Proyecto", "Cliente", "Área (m²)", "Pórticos", "Días obra", "m²/día", "Pórticos/día", "Personal prom."].map((h) => (
+                      <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: MUTED, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtrados.slice().sort((a, b) => b._area - a._area).map((p) => (
+                    <tr key={p.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                      <td className="px-3 py-2 font-semibold whitespace-nowrap">{p.nombre}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{p.cliente}</td>
+                      <td className="px-3 py-2">{p._area.toLocaleString("es-CO")}</td>
+                      <td className="px-3 py-2">{p._porticos}</td>
+                      <td className="px-3 py-2">{p.resultados.diasObraReales ?? "—"}</td>
+                      <td className="px-3 py-2">{p.resultados.m2dia ? round1(p.resultados.m2dia) : "—"}</td>
+                      <td className="px-3 py-2">{p.resultados.porticosDia ? round2(p.resultados.porticosDia) : "—"}</td>
+                      <td className="px-3 py-2">{p.resultados.personalProm ? round1(p.resultados.personalProm) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );
